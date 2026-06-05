@@ -1,0 +1,11 @@
+{
+  "name": "Local",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost/api",
+      "enabled": true
+    }
+  ]
+}
+

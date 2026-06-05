@@ -1,0 +1,35 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP Request Latency",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(clipfetch_http_request_duration_seconds_sum[5m]) / rate(clipfetch_http_request_duration_seconds_count[5m])",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Request Volume",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(clipfetch_http_requests_total[5m])) by (path)",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    }
+  ],
+  "schemaVersion": 39,
+  "style": "dark",
+  "title": "ClipFetch Overview",
+  "version": 1
+}
+

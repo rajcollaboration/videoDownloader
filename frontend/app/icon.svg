@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="6" fill="#1a2a4a"/>
+  <!-- Down-arrow + play triangle combined -->
+  <polygon points="16,8 22,16 18,16 18,22 14,22 14,16 10,16" fill="#4a6cf7"/>
+  <rect x="10" y="24" width="12" height="2" rx="1" fill="#4a6cf7"/>
+</svg>

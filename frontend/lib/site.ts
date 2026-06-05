@@ -1,0 +1,58 @@
+export const siteConfig = {
+  name: "ClipFetch",
+  description:
+    "Free online video downloader for TikTok, LinkedIn, Instagram, Facebook, X, Vimeo, Reddit, and more. Fast processing, multi-quality downloads, and no sign-up required.",
+  url: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost",
+  apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost/api"
+};
+
+export const platformPages = [
+  {
+    slug: "download-facebook-video",
+    title: "Facebook Video Downloader",
+    description:
+      "Download Facebook videos from supported public links with fast link parsing, multi-quality options, and mobile-friendly UI.",
+    platform: "Facebook"
+  },
+  {
+    slug: "download-instagram-reels",
+    title: "Instagram Reels Downloader",
+    description:
+      "Download Instagram Reels and videos from supported public links with preview, quality selection, and audio extraction options.",
+    platform: "Instagram"
+  }
+] as const;
+
+export const faqs = [
+  {
+    question: "Which platforms are supported?",
+    answer:
+      "ClipFetch supports TikTok, LinkedIn, Instagram, Facebook, X (Twitter), Vimeo, Reddit, Pinterest, Twitch, and many other public video links via yt-dlp. YouTube is intentionally disabled. Paste any supported public URL to get started."
+  },
+  {
+    question: "Can I download private content?",
+    answer:
+      "No. The app is designed to reject private, restricted, or unsupported content and show a clear error message. Only public videos are accessible."
+  },
+  {
+    question: "Is audio-only download supported?",
+    answer:
+      "Yes. Every supported video format includes an audio-only option that saves as an MP3 file directly to your downloads folder."
+  },
+  {
+    question: "Is it free to use?",
+    answer:
+      "Yes — ClipFetch is completely free. No account, no subscription, no hidden limits. Just paste a link and download."
+  },
+  {
+    question: "How long are my files stored?",
+    answer:
+      "Downloaded files are automatically deleted from our servers one hour after they are ready. We store nothing long-term."
+  },
+  {
+    question: "Is it legal to download these videos?",
+    answer:
+      "You should only download content you own or have explicit permission to download. Respect copyright, platform terms of service, and applicable local law."
+  }
+];
+

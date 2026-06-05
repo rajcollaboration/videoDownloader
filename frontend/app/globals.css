@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design Tokens ─────────────────────────────────────────── */
+:root {
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
+  --muted: 214 32% 94%;
+  --muted-foreground: 215 16% 40%;
+  --border: 214 32% 88%;
+  --card: 0 0% 100%;
+  --accent: 198 93% 60%;
+  --primary: 222 89% 56%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 160 84% 39%;
+  --font-sans: "Manrope";
+}
+
+.dark {
+  --background: 223 47% 8%;
+  --foreground: 210 40% 98%;
+  --muted: 222 35% 14%;
+  --muted-foreground: 214 20% 72%;
+  --border: 223 22% 20%;
+  --card: 223 39% 10%;
+  --accent: 193 95% 68%;
+  --primary: 213 94% 68%;
+  --primary-foreground: 222 47% 11%;
+  --secondary: 160 84% 54%;
+}
+
+/* ─── Base ───────────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+}
+
+* {
+  @apply border-border;
+}
+
+/* ─── Layout Utilities ───────────────────────────────────────── */
+.container-shell {
+  @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+}
+
+.card-surface {
+  @apply rounded-3xl border bg-card/90 shadow-soft backdrop-blur;
+}
+
+/* ─── Section Labels ─────────────────────────────────────────── */
+.section-label {
+  @apply text-xs font-bold uppercase tracking-[0.25em] text-muted-foreground;
+}
+
+/* ─── Gradient Headings ──────────────────────────────────────── */
+.gradient-heading {
+  @apply bg-gradient-to-br from-foreground via-foreground/90 to-foreground/60 bg-clip-text text-transparent;
+}
+
+/* ─── Platform Badges ────────────────────────────────────────── */
+.platform-badge {
+  @apply flex items-center gap-2.5 rounded-2xl border bg-card/80 px-5 py-3 text-sm font-semibold backdrop-blur transition hover:shadow-soft;
+}
+
+/* ─── Feature Card ───────────────────────────────────────────── */
+.feature-card {
+  @apply card-surface flex flex-col gap-3 p-6 transition hover:-translate-y-1 hover:shadow-soft;
+}
+
+/* ─── Step Number ────────────────────────────────────────────── */
+.step-number {
+  @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary;
+}
+
+/* ─── Keyframes ──────────────────────────────────────────────── */
+@keyframes shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

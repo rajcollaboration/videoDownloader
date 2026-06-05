@@ -1,0 +1,36 @@
+{
+  "info": {
+    "name": "ClipFetch API",
+    "_postman_id": "4a5d9ef8-4d63-4ed9-9c27-clipfetch",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/v1/health"
+      }
+    },
+    {
+      "name": "Resolve YouTube URL",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"https://youtube.com/watch?v=collectiontest\"\n}"
+        },
+        "url": "{{baseUrl}}/v1/videos/resolve"
+      }
+    },
+    {
+      "name": "Overview Analytics",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/v1/analytics/overview"
+      }
+    }
+  ]
+}
+
