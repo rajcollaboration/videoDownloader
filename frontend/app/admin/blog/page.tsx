@@ -48,7 +48,7 @@ const emptyForm = (): BlogPostCreate => ({
   title: "",
   excerpt: "",
   content: "",
-  status: "draft",
+  status: "published",
   featuredImageUrl: "",
   category: "",
   tags: [],
@@ -299,7 +299,7 @@ function PostForm({
                 <input
                   value={form.featuredImageUrl ?? ""}
                   onChange={(e) => set("featuredImageUrl", e.target.value)}
-                  type="url"
+                  type="text"
                   className="min-w-0 flex-1 rounded-xl border bg-card/70 px-4 py-2.5 text-sm outline-none focus:border-primary/50"
                   placeholder="Paste image URL  or  upload below →"
                 />
@@ -451,7 +451,7 @@ function PostForm({
                 <input
                   value={form.ogImageUrl ?? ""}
                   onChange={(e) => set("ogImageUrl", e.target.value)}
-                  type="url"
+                  type="text"
                   className="w-full rounded-xl border bg-card/70 px-4 py-2.5 text-sm outline-none focus:border-primary/50"
                   placeholder="https://…"
                 />

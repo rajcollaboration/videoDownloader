@@ -15,6 +15,9 @@ export function getApiBaseUrl(): string {
     }
     return `${protocol}//${hostname}:${port}/api`;
   }
+  if (process.env.INTERNAL_API_BASE_URL) {
+    return process.env.INTERNAL_API_BASE_URL.replace(/\/$/, "");
+  }
   return (siteConfig.apiBaseUrl ?? "http://localhost/api").replace(/\/$/, "");
 }
 

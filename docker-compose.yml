@@ -7,6 +7,7 @@ services:
     environment:
       HOSTNAME: "0.0.0.0"
       PORT: "3000"
+      INTERNAL_API_BASE_URL: "http://backend:8000"
     ports:
       - "3000:3000"
     restart: unless-stopped
@@ -93,4 +94,3 @@ volumes:
 
 networks:
   appnet:
-

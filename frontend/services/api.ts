@@ -95,6 +95,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(error?.detail ?? "Request failed");
   }
 
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
   return response.json() as Promise<T>;
 }
 
@@ -176,6 +180,98 @@ export interface BlogListResponse {
   totalPages: number;
 }
 
+type BlogPostApi = Omit<
+  BlogPost,
+  | "featuredImageUrl"
+  | "seoTitle"
+  | "seoDescription"
+  | "seoKeywords"
+  | "ogImageUrl"
+  | "canonicalUrl"
+  | "viewCount"
+  | "publishedAt"
+  | "createdAt"
+  | "updatedAt"
+> & {
+  featured_image_url?: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  seo_keywords?: string | null;
+  og_image_url?: string | null;
+  canonical_url?: string | null;
+  view_count?: number;
+  published_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  featuredImageUrl?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  seoKeywords?: string | null;
+  ogImageUrl?: string | null;
+  canonicalUrl?: string | null;
+  viewCount?: number;
+  publishedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type BlogPostSummaryApi = Omit<
+  BlogPostSummary,
+  "featuredImageUrl" | "publishedAt" | "createdAt" | "updatedAt"
+> & {
+  featured_image_url?: string | null;
+  published_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  featuredImageUrl?: string | null;
+  publishedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+type BlogListResponseApi = Omit<BlogListResponse, "posts" | "pageSize" | "totalPages"> & {
+  posts: BlogPostSummaryApi[];
+  page_size?: number;
+  total_pages?: number;
+  pageSize?: number;
+  totalPages?: number;
+};
+
+function normalizeBlogSummary(post: BlogPostSummaryApi): BlogPostSummary {
+  return {
+    ...post,
+    featuredImageUrl: post.featuredImageUrl ?? post.featured_image_url ?? null,
+    publishedAt: post.publishedAt ?? post.published_at ?? null,
+    createdAt: post.createdAt ?? post.created_at ?? "",
+    updatedAt: post.updatedAt ?? post.updated_at ?? "",
+  };
+}
+
+function normalizeBlogPost(post: BlogPostApi): BlogPost {
+  return {
+    ...post,
+    featuredImageUrl: post.featuredImageUrl ?? post.featured_image_url ?? null,
+    seoTitle: post.seoTitle ?? post.seo_title ?? null,
+    seoDescription: post.seoDescription ?? post.seo_description ?? null,
+    seoKeywords: post.seoKeywords ?? post.seo_keywords ?? null,
+    ogImageUrl: post.ogImageUrl ?? post.og_image_url ?? null,
+    canonicalUrl: post.canonicalUrl ?? post.canonical_url ?? null,
+    viewCount: post.viewCount ?? post.view_count ?? 0,
+    publishedAt: post.publishedAt ?? post.published_at ?? null,
+    createdAt: post.createdAt ?? post.created_at ?? "",
+    updatedAt: post.updatedAt ?? post.updated_at ?? "",
+  };
+}
+
+function normalizeBlogList(data: BlogListResponseApi): BlogListResponse {
+  return {
+    ...data,
+    posts: data.posts.map(normalizeBlogSummary),
+    pageSize: data.pageSize ?? data.page_size ?? 10,
+    totalPages: data.totalPages ?? data.total_pages ?? 0,
+  };
+}
+
 export type BlogPostCreate = Omit<BlogPost, "id" | "viewCount" | "publishedAt" | "createdAt" | "updatedAt">;
 export type BlogPostUpdate = Partial<BlogPostCreate>;
 
@@ -186,11 +282,13 @@ export async function fetchPublishedPosts(params?: { page?: number; category?: s
   if (params?.page) qs.set("page", String(params.page));
   if (params?.category) qs.set("category", params.category);
   if (params?.q) qs.set("q", params.q);
-  return request<BlogListResponse>(`/v1/blog/?${qs}`);
+  const data = await request<BlogListResponseApi>(`/v1/blog/?${qs}`);
+  return normalizeBlogList(data);
 }
 
 export async function fetchPostBySlug(slug: string) {
-  return request<BlogPost>(`/v1/blog/${slug}`);
+  const post = await request<BlogPostApi>(`/v1/blog/${slug}`);
+  return normalizeBlogPost(post);
 }
 
 export async function fetchCategories(): Promise<string[]> {
@@ -226,25 +324,28 @@ export async function adminFetchPosts(adminKey: string, params?: { page?: number
   const qs = new URLSearchParams();
   if (params?.page) qs.set("page", String(params.page));
   if (params?.status) qs.set("status", params.status);
-  return request<BlogListResponse>(`/v1/blog/admin/posts?${qs}`, {
+  const data = await request<BlogListResponseApi>(`/v1/blog/admin/posts?${qs}`, {
     headers: { "X-Admin-Key": adminKey }
   });
+  return normalizeBlogList(data);
 }
 
 export async function adminCreatePost(adminKey: string, payload: BlogPostCreate) {
-  return request<BlogPost>("/v1/blog/admin/posts", {
+  const post = await request<BlogPostApi>("/v1/blog/admin/posts", {
     method: "POST",
     body: JSON.stringify(toSnakeCase(payload)),
     headers: { "X-Admin-Key": adminKey }
   });
+  return normalizeBlogPost(post);
 }
 
 export async function adminUpdatePost(adminKey: string, id: string, payload: BlogPostUpdate) {
-  return request<BlogPost>(`/v1/blog/admin/posts/${id}`, {
+  const post = await request<BlogPostApi>(`/v1/blog/admin/posts/${id}`, {
     method: "PUT",
     body: JSON.stringify(toSnakeCase(payload)),
     headers: { "X-Admin-Key": adminKey }
   });
+  return normalizeBlogPost(post);
 }
 
 export async function adminDeletePost(adminKey: string, id: string) {
