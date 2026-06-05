@@ -32,7 +32,7 @@ export function useToast() {
       description: string,
       variant: ToastItem["variant"] = "default"
     ) => {
-      const id = crypto.randomUUID();
+      const id = generateId();
       setItems((current) => [...current, { id, title, description, variant }]);
 
       // Auto-dismiss after 5 s

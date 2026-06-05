@@ -14,7 +14,7 @@ interface DownloadResultCardProps {
 }
 
 /** Short proxy URL by request id — avoids huge LinkedIn/CDN query strings in the browser. */
-function toProxiedThumb(requestId: string, raw: string | undefined): string {
+function toProxiedThumb(requestId: string): string {
   if (!requestId) return "/fallback.svg";
   const proxied = apiUrl(`/v1/videos/${requestId}/thumbnail`);
   return proxied;
@@ -24,12 +24,12 @@ export function DownloadResultCard({
   data,
   onStartDownload
 }: DownloadResultCardProps) {
-  const [imgSrc, setImgSrc] = useState(() => toProxiedThumb(data.requestId, data.thumbnailUrl));
+  const [imgSrc, setImgSrc] = useState(() => toProxiedThumb(data.requestId));
   const [copied, setCopied] = useState(false);
   const { pushToast } = useToast();
 
   useEffect(() => {
-    setImgSrc(toProxiedThumb(data.requestId, data.thumbnailUrl));
+    setImgSrc(toProxiedThumb(data.requestId));
   }, [data.thumbnailUrl, data.requestId]);
 
   const handleCopy = async () => {
