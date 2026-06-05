@@ -27,20 +27,6 @@ export function VideoCard({
   const proxied = isProxiedThumbnail(imageSrc);
 
   const handleImgError = () => {
-    // #region agent log
-    fetch("http://127.0.0.1:7391/ingest/461347e9-e042-4fd8-8a6d-adbcfa48d9c6", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "7b0c8d" },
-      body: JSON.stringify({
-        sessionId: "7b0c8d",
-        hypothesisId: "C",
-        location: "video-card.tsx:onError",
-        message: "thumbnail failed to load",
-        data: { imageSrc, proxied },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     onImageError();
   };
 

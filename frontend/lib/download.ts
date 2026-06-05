@@ -8,20 +8,6 @@ import { resolveApiUrl } from "@/lib/api-url";
  */
 export function triggerBrowserDownload(url: string, filename = "video.mp4"): void {
   const absoluteUrl = resolveApiUrl(url);
-  // #region agent log
-  fetch("http://127.0.0.1:7391/ingest/461347e9-e042-4fd8-8a6d-adbcfa48d9c6", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "7b0c8d" },
-    body: JSON.stringify({
-      sessionId: "7b0c8d",
-      hypothesisId: "A",
-      location: "download.ts:triggerBrowserDownload",
-      message: "download URL resolved",
-      data: { raw: url, absolute: absoluteUrl, pageOrigin: typeof window !== "undefined" ? window.location.origin : null },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
   fetch(absoluteUrl)
     .then((res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

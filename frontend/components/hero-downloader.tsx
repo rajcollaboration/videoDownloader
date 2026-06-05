@@ -14,6 +14,7 @@ import {
   isSupportedVideoUrl,
   isYouTubeUrl,
 } from "@/lib/supported-platforms";
+import { Alert } from "@/components/ui/alert";
 import { Toast } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -43,6 +44,11 @@ export function HeroDownloader() {
   const [isQueueing, setIsQueueing] = useState(false);
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
   const [job, setJob] = useState<DownloadJob | null>(null);
+  const [alert, setAlert] = useState<{
+    title: string;
+    description: string;
+    variant: "error" | "info" | "success";
+  } | null>(null);
   const { items, pushToast, dismissToast } = useToast();
   const retryPayload = useRef<{ requestId: string; formatId: string; audioOnly?: boolean } | null>(null);
   const progressAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -64,12 +70,34 @@ export function HeroDownloader() {
   }, [job]);
 
   // ─── Paste from clipboard ────────────────────────────────────
+  useEffect(() => {
+    if (!alert) return;
+
+    const timeout = window.setTimeout(() => setAlert(null), 8000);
+    return () => window.clearTimeout(timeout);
+  }, [alert]);
+
+  useEffect(() => {
+    if (job?.status !== "failed") return;
+
+    const message = job.message || "Your download encountered an error.";
+    setAlert({ title: "Download failed", description: message, variant: "error" });
+    pushToast("Download failed", message, "error");
+  }, [job?.status, job?.message, pushToast]);
+
+  const showAlert = (title: string, description: string, variant: "error" | "info" | "success" = "error") => {
+    setAlert({ title, description, variant });
+    pushToast(title, description, variant);
+  };
+
+  const hideAlert = () => setAlert(null);
+
   async function handlePaste() {
     try {
       const text = await navigator.clipboard.readText();
       setUrl(text.trim());
     } catch {
-      pushToast("Clipboard error", "Unable to read clipboard.", "error");
+      showAlert("Clipboard error", "Unable to read clipboard.", "error");
     }
   }
 
@@ -78,7 +106,7 @@ export function HeroDownloader() {
     // Zod validation before hitting the API
     const result = urlSchema.safeParse(url.trim());
     if (!result.success) {
-      pushToast("Invalid URL", result.error.errors[0].message, "error");
+      showAlert("Invalid URL", result.error.errors[0].message, "error");
       return;
     }
 
@@ -91,7 +119,7 @@ export function HeroDownloader() {
       setMetadata(response);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to resolve link.";
-      pushToast("Link rejected", message, "error");
+      showAlert("Link rejected", message, "error");
     } finally {
       setIsLoading(false);
     }
@@ -130,7 +158,7 @@ export function HeroDownloader() {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to create job.";
-      pushToast("Queue error", message, "error");
+      showAlert("Queue error", message, "error");
     } finally {
       setIsQueueing(false);
     }
@@ -145,7 +173,7 @@ export function HeroDownloader() {
       pushToast("Retrying download", "Job requeued successfully.", "info");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Retry failed.";
-      pushToast("Retry failed", message, "error");
+      showAlert("Retry failed", message, "error");
     }
   }
 
@@ -157,6 +185,16 @@ export function HeroDownloader() {
   return (
     <>
       <Toast items={items} onDismiss={dismissToast} />
+      <AnimatePresence>
+        {alert ? (
+          <Alert
+            title={alert.title}
+            description={alert.description}
+            variant={alert.variant}
+            onClose={hideAlert}
+          />
+        ) : null}
+      </AnimatePresence>
 
       {/* ── Input card ── */}
       <motion.div

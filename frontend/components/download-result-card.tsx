@@ -17,22 +17,6 @@ interface DownloadResultCardProps {
 function toProxiedThumb(requestId: string, raw: string | undefined): string {
   if (!requestId) return "/fallback.svg";
   const proxied = apiUrl(`/v1/videos/${requestId}/thumbnail`);
-  // #region agent log
-  if (typeof window !== "undefined") {
-    fetch("http://127.0.0.1:7391/ingest/461347e9-e042-4fd8-8a6d-adbcfa48d9c6", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "7b0c8d" },
-      body: JSON.stringify({
-        sessionId: "7b0c8d",
-        hypothesisId: "D",
-        location: "download-result-card.tsx:toProxiedThumb",
-        message: "thumbnail URL by requestId",
-        data: { proxied, requestId, hasRawThumb: Boolean(raw?.startsWith("http")) },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }
-  // #endregion
   return proxied;
 }
 
