@@ -1,19 +1,13 @@
 import { siteConfig } from "@/lib/site";
 
 /**
- * API base URL that works when the UI is served on :3000 (direct Next.js)
- * or via Nginx on :80. Always targets the host's `/api` reverse proxy.
+ * API base URL when the UI is on a dev port (direct Next.js) or via Nginx (:80/:443).
+ * Dev ports map API to the host's `/api` (nginx on port 80).
  */
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
-    const { protocol, hostname, port } = window.location;
-    if (port === "3000") {
-      return `${protocol}//${hostname}/api`;
-    }
-    if (!port || port === "80" || port === "443") {
-      return `${protocol}//${hostname}/api`;
-    }
-    return `${protocol}//${hostname}:${port}/api`;
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}/api`;
   }
   if (process.env.INTERNAL_API_BASE_URL) {
     return process.env.INTERNAL_API_BASE_URL.replace(/\/$/, "");

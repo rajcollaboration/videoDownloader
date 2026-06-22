@@ -24,7 +24,7 @@ docker compose up --build
 
 3. Ensure the stack is running (`docker compose up -d`), then open:
 
-- Frontend: `http://localhost:3000`
+- Frontend (direct): `http://localhost:3002` (set `FRONTEND_HOST_PORT` in `.env` to change)
 - API: `http://localhost:8000/docs`
 - Reverse proxy: `http://localhost`
 
@@ -100,7 +100,7 @@ bash scripts/deploy-production.sh init-ssl   # first time: Let's Encrypt + HTTPS
 bash scripts/deploy-production.sh deploy     # later: rebuild & restart
 ```
 
-Open **https://clipzyworld.online** (not port 3000). Ports **80** and **443** must be open in the firewall.
+Open **https://clipzyworld.online** (ports **80** and **443** via nginx — no `:3002` or `:3000` on the server). Local dev uses `FRONTEND_HOST_PORT` (default **3002**); production hides the frontend port entirely.
 
 Files added for production:
 
