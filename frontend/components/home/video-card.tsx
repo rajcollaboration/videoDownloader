@@ -26,10 +26,6 @@ export function VideoCard({
 }: VideoCardProps) {
   const proxied = isProxiedThumbnail(imageSrc);
 
-  const handleImgError = () => {
-    onImageError();
-  };
-
   return (
     <div className="rounded-2xl border bg-card/90 p-4 shadow-lg md:p-6">
       <div className="grid gap-5 md:grid-cols-[280px,1fr]">
@@ -40,7 +36,7 @@ export function VideoCard({
               src={imageSrc}
               alt={data.title}
               className="absolute inset-0 h-full w-full object-cover"
-              onError={handleImgError}
+              onError={onImageError}
             />
           ) : (
             <Image
@@ -49,7 +45,7 @@ export function VideoCard({
               fill
               className="object-cover"
               sizes="(max-width: 768px) 100vw, 280px"
-              onError={handleImgError}
+              onError={onImageError}
             />
           )}
         </div>

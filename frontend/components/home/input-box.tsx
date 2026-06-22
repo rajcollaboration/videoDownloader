@@ -1,6 +1,6 @@
 "use client";
 
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, RefObject } from "react";
 import { ArrowRight, Clipboard, Link2, Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ interface InputBoxProps {
   onSubmit: () => void;
   onClear: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+  inputRef?: RefObject<HTMLInputElement | null>;
 }
 
 export function InputBox({
@@ -25,6 +26,7 @@ export function InputBox({
   onSubmit,
   onClear,
   onKeyDown,
+  inputRef,
 }: InputBoxProps) {
   return (
     <div className="space-y-3">
@@ -34,6 +36,7 @@ export function InputBox({
         <div className="relative flex-1">
           <Link2 className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={inputRef}
             data-testid="video-url-input"
             placeholder="Paste video link here…"
             className="h-14 rounded-2xl border-border/70 pl-11 pr-10 text-sm shadow-sm transition focus:border-primary/50 focus:ring-2 focus:ring-primary/20 md:text-base"

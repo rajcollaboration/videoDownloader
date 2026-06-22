@@ -6,6 +6,7 @@ from yt_dlp import YoutubeDL
 
 from app.core.config import settings
 from app.services.provider_registry import detect_platform
+from app.services.ytdlp_options import cookie_options
 
 
 class VideoResolverService:
@@ -29,6 +30,7 @@ class VideoResolverService:
                     "player_client": ["android", "ios", "web_safari", "web"],
                 },
             },
+            **cookie_options(),
         }
 
     def validate_url(self, url: str) -> None:
@@ -47,26 +49,32 @@ class VideoResolverService:
             with YoutubeDL(self._ydl_options) as ydl:
                 info = ydl.extract_info(url, download=False)
         except Exception as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Could not access this content: {exc}",
-            ) from exc
+            status_code, detail = self._friendly_error(exc)
+            raise HTTPException(status_code=status_code, detail=detail) from exc
 
-        if info.get("availability") in {"private", "subscriber_only"}:
+        entries = info.get("entries") or []
+        is_playlist = bool(entries)
+        raw_formats = info.get("formats", []) if not is_playlist else []
+
+        # yt-dlp sometimes flags `availability` as "private"/"subscriber_only"
+        # from page-level signals (e.g. a login wall shown to anonymous
+        # visitors) even though it still managed to extract playable formats
+        # or playlist entries. Only treat it as truly inaccessible when no
+        # usable content came back — otherwise we'd reject videos that
+        # actually download fine.
+        has_content = bool(raw_formats) or bool(entries)
+        if info.get("availability") in {"private", "subscriber_only"} and not has_content:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Private or restricted content is not supported.",
             )
 
-        entries = info.get("entries") or []
-        is_playlist = bool(entries)
         if is_playlist and len(entries) > settings.max_playlist_size:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Playlist exceeds the maximum size of {settings.max_playlist_size} items.",
             )
 
-        raw_formats = info.get("formats", []) if not is_playlist else []
         formats = self._build_quality_options(raw_formats)
 
         return {
@@ -79,6 +87,54 @@ class VideoResolverService:
             "is_playlist": is_playlist,
             "items_count": len(entries) if is_playlist else None,
         }
+
+    def _friendly_error(self, exc: Exception) -> tuple[int, str]:
+        """Translate a raw yt-dlp exception into a clearer status + message.
+
+        yt-dlp surfaces Instagram/Facebook/TikTok anti-bot responses (rate
+        limiting, anonymous-view login walls) with messages like "Requested
+        content is not available, rate-limit reached or login required" —
+        which reads as "this video is private" even when the same video
+        downloads fine elsewhere (e.g. with a logged-in session). Map known
+        patterns to honest, actionable messages instead of dumping the raw
+        yt-dlp error.
+        """
+        message = str(exc).lower()
+
+        if "rate-limit" in message or "rate limit" in message or "429" in message:
+            return (
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "This platform is temporarily rate-limiting our server. "
+                "Please wait a minute and try again.",
+            )
+
+        if "login required" in message or "log in" in message:
+            return (
+                status.HTTP_403_FORBIDDEN,
+                "This content could not be verified as public — the platform "
+                "is asking for a logged-in session. If you're sure this video "
+                "is public, please try again shortly.",
+            )
+
+        if "private" in message or "subscriber_only" in message:
+            return (
+                status.HTTP_403_FORBIDDEN,
+                "Private or restricted content is not supported.",
+            )
+
+        if "unavailable" in message or "not available" in message or "404" in message:
+            return (
+                status.HTTP_400_BAD_REQUEST,
+                "This content is unavailable. It may have been deleted, made "
+                "private, or restricted in your region.",
+            )
+
+        return (
+            status.HTTP_400_BAD_REQUEST,
+            "Could not access this content. The link may be invalid, or the "
+            "platform is temporarily blocking automated requests — please try "
+            "again shortly.",
+        )
 
     def _best_thumbnail(self, info: dict) -> str:
         thumb = info.get("thumbnail")

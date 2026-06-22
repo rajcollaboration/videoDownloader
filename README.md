@@ -80,6 +80,34 @@ docker compose up --build
 - `postgres` - relational database
 - `nginx` - reverse proxy
 
+## Production (clipzyworld.online)
+
+Deploy on a Linux VPS with Docker. DNS at BigRock must point to the server:
+
+| Type | Host | Value |
+|------|------|--------|
+| A | `@` | Your server public IP |
+| A | `www` | Same IP |
+
+**On the server:**
+
+```bash
+git clone <your-repo> && cd "Video Downloader"
+cp .env.production.example .env
+# Edit .env — set SECRET_KEY, ADMIN_API_KEY, POSTGRES_PASSWORD, CERTBOT_EMAIL
+
+bash scripts/deploy-production.sh init-ssl   # first time: Let's Encrypt + HTTPS
+bash scripts/deploy-production.sh deploy     # later: rebuild & restart
+```
+
+Open **https://clipzyworld.online** (not port 3000). Ports **80** and **443** must be open in the firewall.
+
+Files added for production:
+
+- `docker-compose.prod.yml` — HTTPS nginx, no public frontend port, certbot renewal
+- `infra/nginx/production.conf` — SSL reverse proxy
+- `.env.production.example` — production environment template
+
 ## Environment
 
 See `.env.example` for the required variables.

@@ -21,3 +21,4 @@ logs/*
 backend/test.db
 frontend/playwright-report
 frontend/test-results
+certbot/

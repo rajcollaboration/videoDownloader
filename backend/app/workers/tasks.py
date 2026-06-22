@@ -13,6 +13,7 @@ from app.models.download import DownloadJob, PlaylistItem
 from app.models.video import VideoRequest
 from app.services import progress_store
 from app.services.storage import StorageService
+from app.services.ytdlp_options import cookie_options
 from app.workers.celery_app import celery_app
 
 storage = StorageService()
@@ -378,6 +379,7 @@ def _base_ydl_opts(
                 "player_client": ["android", "ios", "web_safari", "web"],
             },
         },
+        **cookie_options(),
     }
     if options.get("merge_output_format") is None:
         options.pop("merge_output_format", None)

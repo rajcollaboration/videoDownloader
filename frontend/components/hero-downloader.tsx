@@ -52,6 +52,7 @@ export function HeroDownloader() {
   const { items, pushToast, dismissToast } = useToast();
   const retryPayload = useRef<{ requestId: string; formatId: string; audioOnly?: boolean } | null>(null);
   const progressAnchorRef = useRef<HTMLDivElement | null>(null);
+  const urlInputRef = useRef<HTMLInputElement | null>(null);
 
   // ─── Poll at 1 s intervals while job is active ───────────────
   useEffect(() => {
@@ -93,11 +94,31 @@ export function HeroDownloader() {
   const hideAlert = () => setAlert(null);
 
   async function handlePaste() {
+    const focusForManualPaste = (description: string) => {
+      const el = urlInputRef.current;
+      el?.focus();
+      el?.select();
+      showAlert("Paste manually", description, "info");
+    };
+
+    // The Clipboard read API only exists in secure contexts (HTTPS or
+    // localhost) and isn't implemented in some browsers (e.g. Firefox).
+    // Fall back to focusing the input so the user can paste with
+    // Ctrl/Cmd+V or a long-press, instead of a dead-end "error".
+    if (!navigator.clipboard?.readText) {
+      focusForManualPaste(
+        "Automatic clipboard access isn't available on this connection. The link box is focused — press Ctrl+V (or Cmd+V, or long-press → Paste on mobile)."
+      );
+      return;
+    }
+
     try {
       const text = await navigator.clipboard.readText();
       setUrl(text.trim());
     } catch {
-      showAlert("Clipboard error", "Unable to read clipboard.", "error");
+      focusForManualPaste(
+        "Clipboard permission was denied. The link box is focused — press Ctrl+V (or Cmd+V) to paste."
+      );
     }
   }
 
@@ -211,6 +232,7 @@ export function HeroDownloader() {
           onSubmit={handleResolve}
           onClear={() => setUrl("")}
           onKeyDown={handleKeyDown}
+          inputRef={urlInputRef}
         />
 
         {/* Trust badges */}

@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     ytdlp_external_downloader: str | None = None
     ytdlp_external_downloader_args: str | None = None
     ytdlp_http_chunk_size: int | None = None
+    # Optional path to a Netscape-format cookies.txt (exported from a logged-in
+    # browser session). Instagram/Facebook/TikTok aggressively rate-limit or
+    # show "login required"/"private" errors for anonymous requests — passing
+    # cookies from a real account avoids most of these false positives.
+    ytdlp_cookies_file: str | None = None
 
     @property
     def allowed_origins_list(self) -> list[str]:
