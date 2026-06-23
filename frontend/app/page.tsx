@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { FeatureCard } from "@/components/home/feature-card";
 import { HeroSection } from "@/components/home/hero-section";
+import { AdsenseSlot } from "@/components/adsense-slot";
 import { SchemaMarkup } from "@/components/schema-markup";
 import { faqs, platformPages } from "@/lib/site";
 
@@ -157,6 +158,10 @@ export default function HomePage() {
 
       {/* ── Hero ── */}
       <HeroSection />
+
+      <section className="container-shell py-6">
+        <AdsenseSlot label="Top Sidebar Banner" />
+      </section>
 
       {/* ── Supported Platforms ── */}
       <section className="container-shell py-14">

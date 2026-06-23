@@ -49,7 +49,8 @@ init_ssl() {
   NGINX_CONF=acme.conf $COMPOSE up -d --build postgres redis backend worker frontend nginx
 
   echo "==> Requesting certificate for $DOMAIN and www.$DOMAIN ..."
-  $COMPOSE run --rm certbot certonly --webroot \
+  # Override the certbot service entrypoint (renewal loop) for one-off issuance.
+  $COMPOSE run --rm --entrypoint certbot certbot certonly --webroot \
     -w /var/www/certbot \
     -d "$DOMAIN" \
     -d "www.$DOMAIN" \
@@ -81,7 +82,7 @@ deploy() {
 
 renew() {
   load_env
-  $COMPOSE run --rm certbot renew --force-renewal
+  $COMPOSE run --rm --entrypoint certbot certbot renew --force-renewal
   NGINX_CONF=production.conf $COMPOSE exec nginx nginx -s reload || $COMPOSE restart nginx
   echo "==> Certificate renewed."
 }

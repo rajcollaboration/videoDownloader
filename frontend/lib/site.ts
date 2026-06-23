@@ -6,6 +6,13 @@ export const siteConfig = {
   apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost/api"
 };
 
+/** Google AdSense publisher id (ca-pub-…) */
+export const adsenseClient = process.env.NEXT_PUBLIC_ADSENSE_CLIENT ?? "";
+
+/** Google Search Console HTML meta tag verification code */
+export const googleSiteVerification =
+  process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ?? "";
+
 export const platformPages = [
   {
     slug: "download-facebook-video",

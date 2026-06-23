@@ -4,10 +4,11 @@ import Link from "next/link";
 
 import "@/app/globals.css";
 import { Footer } from "@/components/footer";
+import { GoogleAdSense } from "@/components/google-adsense";
 import { MobileNav } from "@/components/mobile-nav";
 import { ModeToggle } from "@/components/mode-toggle";
 import { ThemeProvider } from "@/components/theme-provider";
-import { siteConfig } from "@/lib/site";
+import { googleSiteVerification, siteConfig } from "@/lib/site";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -67,7 +68,10 @@ export const metadata: Metadata = {
   },
   alternates: {
     canonical: siteConfig.url
-  }
+  },
+  ...(googleSiteVerification
+    ? { verification: { google: googleSiteVerification } }
+    : {})
 };
 
 export default function RootLayout({
@@ -76,6 +80,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={manrope.variable}>
+        <GoogleAdSense />
         <ThemeProvider>
           <div className="flex min-h-screen flex-col">
             {/* ─── Header ─────────────────────────────────────── */}
