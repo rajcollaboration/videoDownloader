@@ -84,6 +84,7 @@ export default function RootLayout({
         {googleVerification ? (
          <meta name="google-site-verification" content="ZoI06Mp6xjwbpTc3Rfr58Ck7Rg0kF1aYjaLq7V2L3Dc" />
         ) : null}
+        <meta name="google-adsense-account" content="ca-pub-1909886494208349"></meta>
       </head>
       <body className={manrope.variable}>
         <GoogleAdSense />
