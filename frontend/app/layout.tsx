@@ -8,12 +8,14 @@ import { GoogleAdSense } from "@/components/google-adsense";
 import { MobileNav } from "@/components/mobile-nav";
 import { ModeToggle } from "@/components/mode-toggle";
 import { ThemeProvider } from "@/components/theme-provider";
-import { googleSiteVerification, siteConfig } from "@/lib/site";
+import { getGoogleSiteVerificationCode, siteConfig } from "@/lib/site";
 
 const manrope = Manrope({
   subsets: ["latin"],
   variable: "--font-sans"
 });
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
@@ -68,17 +70,21 @@ export const metadata: Metadata = {
   },
   alternates: {
     canonical: siteConfig.url
-  },
-  ...(googleSiteVerification
-    ? { verification: { google: googleSiteVerification } }
-    : {})
+  }
 };
 
 export default function RootLayout({
   children
 }: Readonly<{ children: React.ReactNode }>) {
+  const googleVerification = getGoogleSiteVerificationCode();
+
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {googleVerification ? (
+         <meta name="google-site-verification" content="ZoI06Mp6xjwbpTc3Rfr58Ck7Rg0kF1aYjaLq7V2L3Dc" />
+        ) : null}
+      </head>
       <body className={manrope.variable}>
         <GoogleAdSense />
         <ThemeProvider>

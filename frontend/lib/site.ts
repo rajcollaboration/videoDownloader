@@ -9,9 +9,18 @@ export const siteConfig = {
 /** Google AdSense publisher id (ca-pub-…) */
 export const adsenseClient = process.env.NEXT_PUBLIC_ADSENSE_CLIENT ?? "";
 
-/** Google Search Console HTML meta tag verification code */
+/** Google Search Console HTML meta tag verification code (build-time fallback). */
 export const googleSiteVerification =
   process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ?? "";
+
+/** Runtime verification code — set GOOGLE_SITE_VERIFICATION in .env (no rebuild). */
+export function getGoogleSiteVerificationCode(): string {
+  return (
+    process.env.GOOGLE_SITE_VERIFICATION?.trim() ||
+    process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim() ||
+    ""
+  );
+}
 
 export const platformPages = [
   {
