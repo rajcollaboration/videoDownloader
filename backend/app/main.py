@@ -8,24 +8,27 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
-# Ensure image MIME types are registered — some Alpine/Debian Docker images
-# ship a minimal mimetypes database that lacks WebP and other modern types.
 mimetypes.add_type("image/webp", ".webp")
 mimetypes.add_type("image/jpeg", ".jpg")
 mimetypes.add_type("image/jpeg", ".jpeg")
 mimetypes.add_type("image/png", ".png")
 mimetypes.add_type("image/gif", ".gif")
+mimetypes.add_type("video/mp4", ".mp4")
 
 from app.core.config import settings
 from app.core.logging import configure_logging
 from app.db.base import Base
-from app.db.session import engine
-from app.routes import analytics, blog, downloads, health, videos
+from app.db.init_extensions import init_db_extensions
+from app.db.session import SessionLocal, engine
+from app.routes import analytics, auth, blog, downloads, health, jobs, media, videos
 
 configure_logging()
+
+with SessionLocal() as db:
+    init_db_extensions(db)
+
 Base.metadata.create_all(bind=engine)
 
-# Ensure blog image upload directory exists and serve it as static files
 _BLOG_IMAGES_DIR = Path(settings.local_storage_path) / "blog-images"
 _BLOG_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -33,8 +36,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="ClipFetch API",
-    version="0.1.0",
-    summary="Async video downloader API for supported public URLs",
+    version="1.0.0",
+    summary="Video downloader and AI video search & clipping platform",
 )
 
 REQUEST_COUNT = Counter(
@@ -59,7 +62,6 @@ app.add_middleware(
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log incoming request body to help diagnose 422 validation errors."""
     if request.method in ("POST", "PUT", "PATCH"):
         body = await request.body()
         logger.debug(
@@ -70,11 +72,7 @@ async def log_requests(request: Request, call_next):
         )
     response = await call_next(request)
     if response.status_code == 422:
-        logger.warning(
-            "422 Unprocessable Entity on %s %s",
-            request.method,
-            request.url.path,
-        )
+        logger.warning("422 Unprocessable Entity on %s %s", request.method, request.url.path)
     return response
 
 
@@ -85,11 +83,15 @@ async def metrics_middleware(request: Request, call_next):
     REQUEST_COUNT.labels(request.method, request.url.path, response.status_code).inc()
     return response
 
+
 app.mount("/media/blog", StaticFiles(directory=str(_BLOG_IMAGES_DIR)), name="blog-images")
 
 app.include_router(health.router, prefix="/v1", tags=["health"])
+app.include_router(auth.router, prefix="/v1/auth", tags=["auth"])
 app.include_router(videos.router, prefix="/v1/videos", tags=["videos"])
 app.include_router(downloads.router, prefix="/v1/downloads", tags=["downloads"])
+app.include_router(media.router, prefix="/v1/media", tags=["media"])
+app.include_router(jobs.router, prefix="/v1/jobs", tags=["jobs"])
 app.include_router(analytics.router, prefix="/v1/analytics", tags=["analytics"])
 app.include_router(blog.router, prefix="/v1/blog", tags=["blog"])
 

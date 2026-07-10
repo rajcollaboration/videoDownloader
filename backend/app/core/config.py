@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     aws_secret_access_key: str | None = None
     aws_region: str = "us-east-1"
     s3_bucket: str | None = None
+    s3_endpoint_url: str | None = None
     storage_mode: str = "local"
     local_storage_path: Path = Path("/app/storage")
     rate_limit_per_minute: int = 20
@@ -26,20 +27,34 @@ class Settings(BaseSettings):
     enable_youtube: bool = False
     admin_api_key: str = "change-me-admin-key"
 
+    # AI / Video processing
+    ai_worker_url: str = "http://ai-worker:8001"
+    ai_worker_internal_key: str = "change-me-ai-key"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24 * 7
+    max_upload_size_mb: int = 2048
+    allowed_video_extensions: str = "mp4,mov,webm,mkv,avi,mp3,wav,aac,ogg,flac,m4a"
+    embedding_dimensions: int = 384
+    whisper_model_size: str = "base"
+    clip_storage_path: str = "clips"
+    video_storage_path: str = "videos"
+    temp_storage_path: str = "temp"
+    signed_url_expiry_seconds: int = 3600
+
     # yt-dlp tuning
     ytdlp_concurrent_fragments: int = 4
     ytdlp_external_downloader: str | None = None
     ytdlp_external_downloader_args: str | None = None
     ytdlp_http_chunk_size: int | None = None
-    # Optional path to a Netscape-format cookies.txt (exported from a logged-in
-    # browser session). Instagram/Facebook/TikTok aggressively rate-limit or
-    # show "login required"/"private" errors for anonymous requests — passing
-    # cookies from a real account avoids most of these false positives.
     ytdlp_cookies_file: str | None = None
 
     @property
     def allowed_origins_list(self) -> list[str]:
         return [item.strip() for item in self.allowed_origins.split(",") if item.strip()]
+
+    @property
+    def allowed_video_extensions_list(self) -> list[str]:
+        return [item.strip().lower() for item in self.allowed_video_extensions.split(",") if item.strip()]
 
 
 @lru_cache

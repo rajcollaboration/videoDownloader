@@ -114,6 +114,9 @@ export default function RootLayout({
                   <Link href="/blog" className="hover:text-foreground transition">
                     Blog
                   </Link>
+                  <Link href="/studio" className="hover:text-foreground transition">
+                    Studio
+                  </Link>
                   <Link href="/admin/blog" className="hover:text-foreground transition">
                     Admin
                   </Link>

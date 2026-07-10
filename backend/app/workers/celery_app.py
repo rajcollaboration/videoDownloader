@@ -6,7 +6,7 @@ celery_app = Celery(
     "clipfetch",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.workers.tasks"],
+    include=["app.workers.tasks", "app.workers.media_tasks"],
 )
 
 celery_app.conf.update(
@@ -14,13 +14,17 @@ celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
-    # Enable chord callbacks on the Redis result backend.
     result_extended=True,
     result_expires=3600,
-    # Acknowledge tasks only after they finish — avoids losing in-flight
-    # downloads on a worker crash/restart.
     task_acks_late=True,
-    # Each worker process grabs one task at a time; keeps a slow download
-    # from blocking others in the same pool.
     worker_prefetch_multiplier=1,
+    task_routes={
+        "media.download_video_from_url": {"queue": "video-download"},
+        "media.process_video_pipeline": {"queue": "transcription"},
+        "media.generate_clip": {"queue": "clip-generation"},
+        "media.generate_clips_batch": {"queue": "clip-generation"},
+        "media.cleanup_temp_files": {"queue": "cleanup"},
+        "app.workers.tasks.*": {"queue": "celery"},
+    },
+    task_default_queue="celery",
 )
