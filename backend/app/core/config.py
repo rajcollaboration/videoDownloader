@@ -27,15 +27,11 @@ class Settings(BaseSettings):
     enable_youtube: bool = False
     admin_api_key: str = "change-me-admin-key"
 
-    # AI / Video processing
-    ai_worker_url: str = "http://ai-worker:8001"
-    ai_worker_internal_key: str = "change-me-ai-key"
+    # Video processing
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 7
     max_upload_size_mb: int = 2048
-    allowed_video_extensions: str = "mp4,mov,webm,mkv,avi,mp3,wav,aac,ogg,flac,m4a"
-    embedding_dimensions: int = 384
-    whisper_model_size: str = "base"
+    allowed_video_extensions: str = "mp4,mov,webm,mkv,avi,mp3,wav,aac,ogg,flac,m4a,png,jpg,jpeg,svg"
     clip_storage_path: str = "clips"
     video_storage_path: str = "videos"
     temp_storage_path: str = "temp"

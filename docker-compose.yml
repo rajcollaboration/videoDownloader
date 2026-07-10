@@ -43,7 +43,6 @@ services:
     depends_on:
       - postgres
       - redis
-      - ai-worker
     networks:
       - appnet
 
@@ -64,23 +63,6 @@ services:
       - backend
       - redis
       - postgres
-      - ai-worker
-    networks:
-      - appnet
-
-  ai-worker:
-    build:
-      context: ./ai-worker
-    env_file:
-      - .env
-    environment:
-      INTERNAL_API_KEY: ${AI_WORKER_INTERNAL_KEY:-change-me-ai-key}
-      WHISPER_MODEL_SIZE: ${WHISPER_MODEL_SIZE:-base}
-      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
-    volumes:
-      - ./backend/storage:/app/storage
-    restart: unless-stopped
     networks:
       - appnet
 

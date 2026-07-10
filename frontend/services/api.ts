@@ -28,7 +28,8 @@ export type JobStage =
   | "downloading"
   | "processing"
   | "completed"
-  | "failed";
+  | "failed"
+  | "paused";
 
 export interface PlaylistItem {
   id: string;
@@ -47,7 +48,7 @@ export interface PlaylistItem {
 
 export interface DownloadJob {
   jobId: string;
-  status: "pending" | "processing" | "completed" | "failed";
+  status: "pending" | "processing" | "completed" | "failed" | "paused";
   progress: number;
   message: string;
   outputPath?: string | null;
@@ -127,6 +128,28 @@ export async function createDownloadJob(payload: {
 
 export async function fetchDownloadJob(jobId: string) {
   return request<DownloadJob>(`/v1/downloads/${jobId}`);
+}
+
+export async function createBatchDownload(payload: { urls: string[]; audioOnly?: boolean }) {
+  return request<{ batchId: string; jobs: DownloadJob[] }>("/v1/downloads/batch", {
+    method: "POST",
+    body: JSON.stringify({
+      urls: payload.urls,
+      audio_only: payload.audioOnly ?? false,
+    }),
+  });
+}
+
+export async function pauseDownload(jobId: string) {
+  return request<{ status: string }>(`/v1/downloads/${jobId}/pause`, { method: "POST" });
+}
+
+export async function resumeDownload(jobId: string) {
+  return request<{ status: string }>(`/v1/downloads/${jobId}/resume`, { method: "POST" });
+}
+
+export async function cancelDownload(jobId: string) {
+  return request<{ status: string }>(`/v1/downloads/${jobId}/cancel`, { method: "POST" });
 }
 
 export async function fetchDashboardOverview() {

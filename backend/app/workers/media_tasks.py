@@ -1,22 +1,20 @@
 import logging
-import subprocess
-from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
-
-import httpx
 from celery import shared_task
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.clip import Clip
-from app.models.embedding import Embedding, Topic
 from app.models.media_video import MediaVideo
-from app.models.transcript import Transcript, TranscriptChunk, TranscriptSegment
-from app.services.ai_worker_client import ai_worker_client
-from app.services.media_processing import clip_service, ffmpeg_service, processing_job_service
-from app.services.media_storage import clip_storage, temp_storage, video_storage
+from app.models.processing import ProcessingJob
+from app.services.media_processing import (
+    clip_service,
+    ffmpeg_service,
+    processing_job_service,
+)
+from app.services.media_storage import clip_storage, video_storage
 from app.services.video_validation import video_validation
 from app.workers.celery_app import celery_app
 
@@ -49,6 +47,7 @@ def download_video_from_url(self, video_id: str, job_id: str, url: str) -> str:
             str(dest),
             url,
         ]
+        import subprocess
         subprocess.run(cmd, check=True, capture_output=True, timeout=3600)
 
         probe = video_validation.probe_video(dest)
@@ -62,11 +61,10 @@ def download_video_from_url(self, video_id: str, job_id: str, url: str) -> str:
         video.width = probe.get("width")
         video.height = probe.get("height")
         video.fps = probe.get("fps")
-        video.status = "uploaded"
+        video.status = "ready"  # Directly set to ready since transcription is removed
         db.commit()
 
         processing_job_service.update_progress(db, job_id, 100, "Download complete", "completed")
-        process_video_pipeline.delay(video_id, None)
         return video_id
     except Exception as exc:
         logger.exception("URL download failed: %s", exc)
@@ -79,135 +77,6 @@ def download_video_from_url(self, video_id: str, job_id: str, url: str) -> str:
         db.close()
 
 
-@celery_app.task(name="media.process_video_pipeline", bind=True, max_retries=2)
-def process_video_pipeline(self, video_id: str, job_id: str | None) -> str:
-    db = _db()
-    try:
-        if not job_id:
-            job = processing_job_service.create(
-                db, "full_pipeline", video_id=video_id, message="Pipeline started"
-            )
-            job_id = job.id
-
-        video = db.get(MediaVideo, video_id)
-        if not video:
-            raise ValueError("Video not found")
-
-        video.status = "processing"
-        db.commit()
-
-        # Step 1: Extract audio
-        processing_job_service.update_progress(db, job_id, 10, "Extracting audio", "processing")
-        video_path = clip_service.get_video_path(video)
-        audio_path = Path(settings.local_storage_path) / settings.temp_storage_path / f"{video_id}.wav"
-        ffmpeg_service.extract_audio(video_path, audio_path)
-
-        # Step 2: Transcription via AI worker
-        processing_job_service.update_progress(db, job_id, 30, "Transcribing", "processing")
-        transcript_data = ai_worker_client.transcribe_sync(str(audio_path))
-
-        transcript = Transcript(
-            video_id=video_id,
-            full_text=transcript_data.get("full_text", ""),
-            language=transcript_data.get("language"),
-            confidence=transcript_data.get("confidence"),
-            status="completed",
-            word_count=len(transcript_data.get("full_text", "").split()),
-        )
-        db.add(transcript)
-        db.commit()
-        db.refresh(transcript)
-
-        segments = transcript_data.get("segments", [])
-        for idx, seg in enumerate(segments):
-            db.add(
-                TranscriptSegment(
-                    transcript_id=transcript.id,
-                    video_id=video_id,
-                    text=seg["text"],
-                    start_time=seg["start"],
-                    end_time=seg["end"],
-                    confidence=seg.get("confidence"),
-                    sequence_index=idx,
-                )
-            )
-        db.commit()
-
-        # Step 3: Chunk transcript
-        processing_job_service.update_progress(db, job_id, 50, "Chunking transcript", "processing")
-        chunks = _chunk_segments(segments)
-        chunk_records = []
-        for idx, chunk in enumerate(chunks):
-            record = TranscriptChunk(
-                video_id=video_id,
-                transcript_id=transcript.id,
-                text=chunk["text"],
-                start_time=chunk["start"],
-                end_time=chunk["end"],
-                sequence_index=idx,
-            )
-            db.add(record)
-            chunk_records.append(record)
-        db.commit()
-        for record in chunk_records:
-            db.refresh(record)
-
-        # Step 4: Generate embeddings
-        processing_job_service.update_progress(db, job_id, 70, "Generating embeddings", "processing")
-        chunk_payload = [{"id": c.id, "text": c.text} for c in chunk_records]
-        embedding_result = ai_worker_client.generate_embeddings_sync(chunk_payload)
-        embeddings_list = embedding_result.get("embeddings", [])
-
-        for i, emb in enumerate(embeddings_list):
-            if i < len(chunk_records):
-                db.add(
-                    Embedding(
-                        chunk_id=chunk_records[i].id,
-                        video_id=video_id,
-                        embedding=emb,
-                        model_name=embedding_result.get("model", "all-MiniLM-L6-v2"),
-                    )
-                )
-        db.commit()
-
-        # Step 5: Topic detection
-        processing_job_service.update_progress(db, job_id, 85, "Detecting topics", "processing")
-        topic_result = ai_worker_client.detect_topics_sync(
-            segments, video.duration_seconds or 0
-        )
-        for topic in topic_result.get("topics", []):
-            db.add(
-                Topic(
-                    video_id=video_id,
-                    title=topic["title"],
-                    summary=topic.get("summary"),
-                    start_time=topic["start_time"],
-                    end_time=topic["end_time"],
-                    confidence=topic.get("confidence"),
-                    key_decisions=topic.get("key_decisions"),
-                    action_items=topic.get("action_items"),
-                    risks=topic.get("risks"),
-                    issues_raised=topic.get("issues_raised"),
-                )
-            )
-        db.commit()
-
-        video.status = "ready"
-        db.commit()
-        processing_job_service.update_progress(db, job_id, 100, "Processing complete", "completed")
-        return video_id
-    except Exception as exc:
-        logger.exception("Pipeline failed: %s", exc)
-        if job_id:
-            processing_job_service.fail(db, job_id, str(exc))
-        if video := db.get(MediaVideo, video_id):
-            video.status = "failed"
-            db.commit()
-        raise self.retry(exc=exc, countdown=60)
-    finally:
-        db.close()
-
-
 @celery_app.task(name="media.generate_clip", bind=True, max_retries=2)
 def generate_clip(self, clip_id: str, job_id: str) -> str:
     db = _db()
@@ -215,23 +84,36 @@ def generate_clip(self, clip_id: str, job_id: str) -> str:
         clip = db.get(Clip, clip_id)
         if not clip:
             raise ValueError("Clip not found")
-
+        job = db.get(ProcessingJob, job_id)
+        metadata = job.metadata_json or {}
+        format = metadata.get("format", "mp4").lower()
+        audio_only = metadata.get("audio_only", False)
+        
         video = db.get(MediaVideo, clip.video_id)
         if not video:
-            raise ValueError("Video not found")
+            raise ValueError("Media not found")
 
         processing_job_service.update_progress(db, job_id, 10, "Preparing clip", "processing")
         clip.status = "processing"
         db.commit()
 
         video_path = clip_service.get_video_path(video)
-        output_key = f"{clip_id}.mp4"
+        output_key = f"{clip_id}.{format}"
         output_path = Path(settings.local_storage_path) / settings.clip_storage_path / output_key
+        
+        processing_job_service.update_progress(db, job_id, 40, "Clipping via FFmpeg", "processing")
         ffmpeg_service.generate_clip(
-            video_path, output_path, clip.start_time, clip.end_time
+            video_path, output_path, clip.start_time, clip.end_time, format=format, audio_only=audio_only
         )
 
-        clip_storage.save(output_key, str(output_path), "video/mp4")
+        processing_job_service.update_progress(db, job_id, 80, "Saving output to storage", "processing")
+        mime_map = {
+            "mp4": "video/mp4", "mov": "video/quicktime", "webm": "video/webm", "mkv": "video/x-matroska", "avi": "video/x-msvideo",
+            "mp3": "audio/mpeg", "aac": "audio/aac", "wav": "audio/wav", "flac": "audio/flac", "ogg": "audio/ogg"
+        }
+        mime = mime_map.get(format, "video/mp4")
+        clip_storage.save(output_key, str(output_path), mime)
+        
         clip.file_path = str(output_path)
         clip.storage_key = output_key
         clip.file_size = output_path.stat().st_size
@@ -243,6 +125,220 @@ def generate_clip(self, clip_id: str, job_id: str) -> str:
         return clip_id
     except Exception as exc:
         logger.exception("Clip generation failed: %s", exc)
+        processing_job_service.fail(db, job_id, str(exc))
+        if clip := db.get(Clip, clip_id):
+            clip.status = "failed"
+            clip.error_detail = str(exc)[:500]
+            db.commit()
+        raise self.retry(exc=exc, countdown=30)
+    finally:
+        db.close()
+
+
+@celery_app.task(name="media.apply_watermark", bind=True, max_retries=2)
+def apply_watermark(self, clip_id: str, job_id: str) -> str:
+    db = _db()
+    try:
+        clip = db.get(Clip, clip_id)
+        if not clip:
+            raise ValueError("Output record not found")
+        job = db.get(ProcessingJob, job_id)
+        metadata = job.metadata_json or {}
+        watermarks = metadata.get("watermarks", [])
+        
+        video = db.get(MediaVideo, clip.video_id)
+        if not video:
+            raise ValueError("Media not found")
+
+        processing_job_service.update_progress(db, job_id, 10, "Preparing watermark", "processing")
+        clip.status = "processing"
+        db.commit()
+
+        parent_clip_id = metadata.get("parent_clip_id")
+        if parent_clip_id:
+            parent_clip = db.get(Clip, parent_clip_id)
+            if not parent_clip:
+                raise ValueError("Parent clip not found")
+            media_path = Path(parent_clip.file_path)
+            is_image = False
+            duration = parent_clip.duration_seconds or (parent_clip.end_time - parent_clip.start_time)
+        else:
+            media_path = clip_service.get_video_path(video)
+            is_image = video.mime_type and video.mime_type.startswith("image/")
+            duration = video.duration_seconds or 0.0
+
+        ext = Path(media_path).suffix.lstrip(".").lower()
+        output_key = f"{clip_id}.{ext}"
+        output_path = Path(settings.local_storage_path) / settings.clip_storage_path / output_key
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        context = {
+            "file_name": video.title,
+            "video_duration": str(duration),
+        }
+        if job.user_id:
+            from app.models.user import User
+            user = db.get(User, job.user_id)
+            if user:
+                context["username"] = user.email.split("@")[0]
+                context["email"] = user.email
+
+        if is_image:
+            processing_job_service.update_progress(db, job_id, 40, "Watermarking image", "processing")
+            ffmpeg_service.watermark_image(media_path, output_path, watermarks, context)
+            mime = video.mime_type or "image/png"
+        else:
+            processing_job_service.update_progress(db, job_id, 40, "Watermarking video via FFmpeg", "processing")
+            temp_files = ffmpeg_service.watermark_video(
+                media_path, output_path, watermarks,
+                video_width=video.width or 1920,
+                video_height=video.height or 1080,
+                video_duration=duration,
+                context=context
+            )
+            for tf in temp_files:
+                try:
+                    tf.unlink()
+                except Exception:
+                    pass
+            mime = video.mime_type or "video/mp4"
+
+        processing_job_service.update_progress(db, job_id, 80, "Saving output to storage", "processing")
+        clip_storage.save(output_key, str(output_path), mime)
+        
+        clip.file_path = str(output_path)
+        clip.storage_key = output_key
+        clip.file_size = output_path.stat().st_size
+        clip.status = "completed"
+        clip.progress = 100
+        db.commit()
+
+        processing_job_service.update_progress(db, job_id, 100, "Watermarked media ready", "completed")
+        return clip_id
+    except Exception as exc:
+        logger.exception("Watermarking failed: %s", exc)
+        processing_job_service.fail(db, job_id, str(exc))
+        if clip := db.get(Clip, clip_id):
+            clip.status = "failed"
+            clip.error_detail = str(exc)[:500]
+            db.commit()
+        raise self.retry(exc=exc, countdown=30)
+    finally:
+        db.close()
+
+
+@celery_app.task(name="media.convert_format", bind=True, max_retries=2)
+def convert_format(self, clip_id: str, job_id: str) -> str:
+    db = _db()
+    try:
+        clip = db.get(Clip, clip_id)
+        if not clip:
+            raise ValueError("Output record not found")
+        job = db.get(ProcessingJob, job_id)
+        metadata = job.metadata_json or {}
+        
+        video = db.get(MediaVideo, clip.video_id)
+        if not video:
+            raise ValueError("Media not found")
+
+        processing_job_service.update_progress(db, job_id, 10, "Preparing conversion", "processing")
+        clip.status = "processing"
+        db.commit()
+
+        media_path = clip_service.get_video_path(video)
+        format = metadata.get("format", "mp4").lower()
+        output_key = f"{clip_id}.{format}"
+        output_path = Path(settings.local_storage_path) / settings.clip_storage_path / output_key
+        
+        processing_job_service.update_progress(db, job_id, 40, "Converting video via FFmpeg", "processing")
+        ffmpeg_service.convert_video(
+            input_path=media_path,
+            output_path=output_path,
+            format=format,
+            quality=metadata.get("quality_preset", "medium"),
+            resolution=metadata.get("resolution"),
+            fps=metadata.get("fps"),
+            bitrate=metadata.get("bitrate"),
+            codec=metadata.get("codec")
+        )
+
+        processing_job_service.update_progress(db, job_id, 80, "Saving output to storage", "processing")
+        mime_map = {
+            "mp4": "video/mp4", "mov": "video/quicktime", "webm": "video/webm", "mkv": "video/x-matroska", "avi": "video/x-msvideo",
+            "flv": "video/x-flv", "wmv": "video/x-ms-wmv"
+        }
+        mime = mime_map.get(format, "video/mp4")
+        clip_storage.save(output_key, str(output_path), mime)
+        
+        clip.file_path = str(output_path)
+        clip.storage_key = output_key
+        clip.file_size = output_path.stat().st_size
+        clip.status = "completed"
+        clip.progress = 100
+        db.commit()
+
+        processing_job_service.update_progress(db, job_id, 100, "Converted media ready", "completed")
+        return clip_id
+    except Exception as exc:
+        logger.exception("Conversion failed: %s", exc)
+        processing_job_service.fail(db, job_id, str(exc))
+        if clip := db.get(Clip, clip_id):
+            clip.status = "failed"
+            clip.error_detail = str(exc)[:500]
+            db.commit()
+        raise self.retry(exc=exc, countdown=30)
+    finally:
+        db.close()
+
+
+@celery_app.task(name="media.extract_audio", bind=True, max_retries=2)
+def extract_audio(self, clip_id: str, job_id: str) -> str:
+    db = _db()
+    try:
+        clip = db.get(Clip, clip_id)
+        if not clip:
+            raise ValueError("Output record not found")
+        job = db.get(ProcessingJob, job_id)
+        metadata = job.metadata_json or {}
+        
+        video = db.get(MediaVideo, clip.video_id)
+        if not video:
+            raise ValueError("Media not found")
+
+        processing_job_service.update_progress(db, job_id, 10, "Preparing extraction", "processing")
+        clip.status = "processing"
+        db.commit()
+
+        media_path = clip_service.get_video_path(video)
+        format = metadata.get("format", "mp3").lower()
+        output_key = f"{clip_id}.{format}"
+        output_path = Path(settings.local_storage_path) / settings.clip_storage_path / output_key
+        
+        processing_job_service.update_progress(db, job_id, 40, "Extracting audio via FFmpeg", "processing")
+        ffmpeg_service.extract_audio(
+            video_path=media_path,
+            output_path=output_path,
+            format=format,
+            bitrate=metadata.get("bitrate"),
+            preserve_metadata=metadata.get("preserve_metadata", True)
+        )
+
+        processing_job_service.update_progress(db, job_id, 80, "Saving output to storage", "processing")
+        mime_map = {"mp3": "audio/mpeg", "aac": "audio/aac", "wav": "audio/wav", "flac": "audio/flac", "ogg": "audio/ogg"}
+        mime = mime_map.get(format, "audio/mpeg")
+        clip_storage.save(output_key, str(output_path), mime)
+        
+        clip.file_path = str(output_path)
+        clip.storage_key = output_key
+        clip.file_size = output_path.stat().st_size
+        clip.status = "completed"
+        clip.progress = 100
+        db.commit()
+
+        processing_job_service.update_progress(db, job_id, 100, "Audio ready", "completed")
+        return clip_id
+    except Exception as exc:
+        logger.exception("Audio extraction failed: %s", exc)
         processing_job_service.fail(db, job_id, str(exc))
         if clip := db.get(Clip, clip_id):
             clip.status = "failed"
@@ -267,28 +363,3 @@ def cleanup_temp_files(video_id: str) -> None:
         path = temp_dir / pattern
         if path.is_file():
             path.unlink()
-
-
-def _chunk_segments(segments: list[dict], max_chars: int = 500, max_gap: float = 5.0) -> list[dict]:
-    if not segments:
-        return []
-    chunks: list[dict] = []
-    current_text = ""
-    current_start = segments[0]["start"]
-    current_end = segments[0]["end"]
-
-    for seg in segments:
-        gap = seg["start"] - current_end
-        if len(current_text) + len(seg["text"]) > max_chars or gap > max_gap:
-            if current_text.strip():
-                chunks.append({"text": current_text.strip(), "start": current_start, "end": current_end})
-            current_text = seg["text"]
-            current_start = seg["start"]
-            current_end = seg["end"]
-        else:
-            current_text += " " + seg["text"]
-            current_end = seg["end"]
-
-    if current_text.strip():
-        chunks.append({"text": current_text.strip(), "start": current_start, "end": current_end})
-    return chunks

@@ -36,6 +36,7 @@ const stageLabels: Record<JobStage, string> = {
   processing: "Processing…",
   completed: "Completed",
   failed: "Failed",
+  paused: "Paused",
 };
 
 const statusConfig = {
@@ -58,6 +59,11 @@ const statusConfig = {
     pill: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
     icon: <AlertCircle className="h-5 w-5 text-rose-500" />,
     progressVariant: "error" as const,
+  },
+  paused: {
+    pill: "bg-slate-500/15 text-slate-600 dark:text-slate-400",
+    icon: <Loader2 className="h-5 w-5 text-slate-500" />,
+    progressVariant: "default" as const,
   },
 };
 

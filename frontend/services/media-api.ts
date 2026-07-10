@@ -15,40 +15,9 @@ export interface MediaVideo {
   height?: number | null;
   thumbnailPath?: string | null;
   playbackUrl?: string | null;
+  mimeType?: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface TranscriptSegment {
-  id: string;
-  text: string;
-  startTime: number;
-  endTime: number;
-  confidence?: number | null;
-  speaker?: string | null;
-}
-
-export interface Transcript {
-  id: string;
-  videoId: string;
-  fullText?: string | null;
-  language?: string | null;
-  confidence?: number | null;
-  status: string;
-  segments: TranscriptSegment[];
-}
-
-export interface Topic {
-  id: string;
-  title: string;
-  summary?: string | null;
-  startTime: number;
-  endTime: number;
-  confidence?: number | null;
-  keyDecisions?: string[] | null;
-  actionItems?: string[] | null;
-  risks?: string[] | null;
-  issuesRaised?: string[] | null;
 }
 
 export interface Clip {
@@ -80,18 +49,7 @@ export interface ProcessingJob {
   completedAt?: string | null;
 }
 
-export interface SearchResult {
-  startTime: number;
-  endTime: number;
-  confidence: number;
-  summary: string;
-  text?: string | null;
-  chunkId?: string | null;
-}
-
 export interface VideoDetail extends MediaVideo {
-  transcript?: Transcript | null;
-  topics: Topic[];
   clips: Clip[];
   jobs: ProcessingJob[];
 }
@@ -184,14 +142,167 @@ export async function fetchVideoDetail(videoId: string) {
   return mediaRequest<VideoDetail>(`/v1/media/${videoId}`);
 }
 
-export async function startVideoProcessing(videoId: string) {
-  return mediaRequest<ProcessingJob>(`/v1/media/${videoId}/process`, { method: "POST" });
+export interface WatermarkConfig {
+  type: "text" | "logo";
+  text?: string;
+  logoPath?: string;
+  position: string;
+  x?: number;
+  y?: number;
+  opacity: number;
+  scale?: number;
+  rotation: number;
+  margin: number;
+  padding: number;
+  fontName?: string;
+  fontSize: number;
+  fontColor: string;
+  outlineColor?: string;
+  outlineWidth: number;
+  shadowColor?: string;
+  shadowOffsetX: number;
+  shadowOffsetY: number;
+  startTime?: number;
+  endTime?: number;
 }
 
-export async function searchVideo(videoId: string, query: string, topK = 5) {
-  return mediaRequest<SearchResult[]>(`/v1/media/${videoId}/search`, {
+export async function uploadLogo(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return mediaRequest<{ logoPath: string }>("/v1/media/watermark/logo", { method: "POST", body: formData });
+}
+
+export async function applyWatermark(videoId: string, title: string, watermarks: WatermarkConfig[]) {
+  const watermarksMapped = watermarks.map(w => ({
+    type: w.type,
+    text: w.text,
+    logo_path: w.logoPath,
+    position: w.position,
+    x: w.x,
+    y: w.y,
+    opacity: w.opacity,
+    scale: w.scale,
+    rotation: w.rotation,
+    margin: w.margin,
+    padding: w.padding,
+    font_name: w.fontName,
+    font_size: w.fontSize,
+    font_color: w.fontColor,
+    outline_color: w.outlineColor,
+    outline_width: w.outlineWidth,
+    shadow_color: w.shadowColor,
+    shadow_offset_x: w.shadowOffsetX,
+    shadow_offset_y: w.shadowOffsetY,
+    start_time: w.startTime,
+    end_time: w.endTime
+  }));
+  return mediaRequest<Clip>(`/v1/media/${videoId}/watermark`, {
     method: "POST",
-    body: JSON.stringify({ query, top_k: topK }),
+    body: JSON.stringify({ title, watermarks: watermarksMapped }),
+  });
+}
+
+export async function applyWatermarkToClip(clipId: string, title: string, watermarks: WatermarkConfig[]) {
+  const watermarksMapped = watermarks.map(w => ({
+    type: w.type,
+    text: w.text,
+    logo_path: w.logoPath,
+    position: w.position,
+    x: w.x,
+    y: w.y,
+    opacity: w.opacity,
+    scale: w.scale,
+    rotation: w.rotation,
+    margin: w.margin,
+    padding: w.padding,
+    font_name: w.fontName,
+    font_size: w.fontSize,
+    font_color: w.fontColor,
+    outline_color: w.outlineColor,
+    outline_width: w.outlineWidth,
+    shadow_color: w.shadowColor,
+    shadow_offset_x: w.shadowOffsetX,
+    shadow_offset_y: w.shadowOffsetY,
+    start_time: w.startTime,
+    end_time: w.endTime
+  }));
+  return mediaRequest<Clip>(`/v1/media/clips/${clipId}/watermark`, {
+    method: "POST",
+    body: JSON.stringify({ title, watermarks: watermarksMapped }),
+  });
+}
+
+export async function applyWatermarkBatch(videoIds: string[], watermarks: WatermarkConfig[]) {
+  const watermarksMapped = watermarks.map(w => ({
+    type: w.type,
+    text: w.text,
+    logo_path: w.logoPath,
+    position: w.position,
+    x: w.x,
+    y: w.y,
+    opacity: w.opacity,
+    scale: w.scale,
+    rotation: w.rotation,
+    margin: w.margin,
+    padding: w.padding,
+    font_name: w.fontName,
+    font_size: w.fontSize,
+    font_color: w.fontColor,
+    outline_color: w.outlineColor,
+    outline_width: w.outlineWidth,
+    shadow_color: w.shadowColor,
+    shadow_offset_x: w.shadowOffsetX,
+    shadow_offset_y: w.shadowOffsetY,
+    start_time: w.startTime,
+    end_time: w.endTime
+  }));
+  return mediaRequest<Clip[]>("/v1/media/watermark/batch", {
+    method: "POST",
+    body: JSON.stringify({ video_ids: videoIds, watermarks: watermarksMapped }),
+  });
+}
+
+export interface ConvertPayload {
+  title: string;
+  format: string;
+  qualityPreset: string;
+  resolution?: string;
+  fps?: number;
+  bitrate?: string;
+  codec?: string;
+}
+
+export async function convertVideo(videoId: string, payload: ConvertPayload) {
+  return mediaRequest<Clip>(`/v1/media/${videoId}/convert`, {
+    method: "POST",
+    body: JSON.stringify({
+      title: payload.title,
+      format: payload.format,
+      quality_preset: payload.qualityPreset,
+      resolution: payload.resolution,
+      fps: payload.fps,
+      bitrate: payload.bitrate,
+      codec: payload.codec
+    }),
+  });
+}
+
+export interface ExtractAudioPayload {
+  title: string;
+  format: string;
+  bitrate?: string;
+  preserveMetadata?: boolean;
+}
+
+export async function extractAudio(videoId: string, payload: ExtractAudioPayload) {
+  return mediaRequest<Clip>(`/v1/media/${videoId}/extract-audio`, {
+    method: "POST",
+    body: JSON.stringify({
+      title: payload.title,
+      format: payload.format,
+      bitrate: payload.bitrate,
+      preserve_metadata: payload.preserveMetadata ?? true
+    }),
   });
 }
 

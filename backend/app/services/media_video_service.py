@@ -12,7 +12,6 @@ from app.models.processing import ProcessingJob
 from app.services.media_processing import audit_service, processing_job_service
 from app.services.media_storage import video_storage
 from app.services.video_validation import video_validation
-from app.workers.media_tasks import process_video_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,7 @@ class MediaVideoService:
             width=probe.get("width"),
             height=probe.get("height"),
             fps=probe.get("fps"),
-            status="uploaded",
+            status="ready",
         )
         db.add(video)
         db.commit()
@@ -86,7 +85,7 @@ class MediaVideoService:
             width=probe.get("width"),
             height=probe.get("height"),
             fps=probe.get("fps"),
-            status="uploaded",
+            status="ready",
         )
         db.add(video)
         db.commit()
@@ -122,26 +121,6 @@ class MediaVideoService:
         job.celery_task_id = task.id
         db.commit()
         return video, job
-
-    def start_processing(self, db: Session, video_id: str, user_id: str | None = None) -> ProcessingJob:
-        video = db.get(MediaVideo, video_id)
-        if not video or video.deleted_at:
-            raise ValueError("Video not found")
-
-        job = processing_job_service.create(
-            db,
-            job_type="full_pipeline",
-            video_id=video_id,
-            user_id=user_id,
-            message="Starting full processing pipeline",
-        )
-        video.status = "processing"
-        db.commit()
-
-        task = process_video_pipeline.delay(video_id, job.id)
-        job.celery_task_id = task.id
-        db.commit()
-        return job
 
     def list_videos(
         self,

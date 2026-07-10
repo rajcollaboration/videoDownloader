@@ -46,3 +46,10 @@ class DownloadStatusResponse(DownloadResponse):
     speed_bps: float | None = Field(default=None, alias="speedBps")
     downloaded_bytes: int | None = Field(default=None, alias="downloadedBytes")
     total_bytes: int | None = Field(default=None, alias="totalBytes")
+
+
+class CreateBatchDownloadRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    urls: list[str]
+    audio_only: bool = Field(default=False, alias="audioOnly")

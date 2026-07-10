@@ -12,7 +12,10 @@ class DownloadJob(Base):
     __tablename__ = "download_jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    request_id: Mapped[str] = mapped_column(ForeignKey("video_requests.id"), nullable=False)
+    request_id: Mapped[Optional[str]] = mapped_column(ForeignKey("video_requests.id"), nullable=True)
+    url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)
+    batch_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    celery_task_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     format_id: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

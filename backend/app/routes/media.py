@@ -21,21 +21,25 @@ from app.schemas.media import (
     MediaVideoListResponse,
     MediaVideoResponse,
     ProcessingJobResponse,
-    SearchRequest,
-    SearchResultResponse,
-    TopicResponse,
-    TranscriptResponse,
-    TranscriptSegmentResponse,
     VideoDetailResponse,
     VideoFromDownloadRequest,
     VideoFromUrlRequest,
+    WatermarkRequest,
+    BatchWatermarkRequest,
+    ConvertRequest,
+    ExtractAudioRequest,
 )
 from app.services.media_processing import clip_service, processing_job_service
 from app.services.media_storage import clip_storage, video_storage
 from app.services.media_video_service import media_video_service
-from app.services.search_service import search_service
 from app.services.video_validation import video_validation
-from app.workers.media_tasks import generate_clip, generate_clips_batch
+from app.workers.media_tasks import (
+    generate_clip,
+    generate_clips_batch,
+    apply_watermark,
+    convert_format,
+    extract_audio,
+)
 
 router = APIRouter()
 
@@ -168,21 +172,6 @@ def get_video(
     if not video or video.deleted_at:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
 
-    transcript = search_service.get_transcript(db, video_id)
-    transcript_resp = None
-    if transcript:
-        segments = search_service.get_segments(db, transcript.id)
-        transcript_resp = TranscriptResponse(
-            id=transcript.id,
-            video_id=video_id,
-            full_text=transcript.full_text,
-            language=transcript.language,
-            confidence=transcript.confidence,
-            status=transcript.status,
-            segments=[TranscriptSegmentResponse.model_validate(s) for s in segments],
-        )
-
-    topics = search_service.get_topics(db, video_id)
     clips = db.query(Clip).filter(Clip.video_id == video_id, Clip.deleted_at.is_(None)).all()
     jobs = (
         db.query(ProcessingJob)
@@ -195,59 +184,9 @@ def get_video(
     base = _video_response(video)
     return VideoDetailResponse(
         **base.model_dump(),
-        transcript=transcript_resp,
-        topics=[TopicResponse.model_validate(t) for t in topics],
         clips=[_clip_response(c) for c in clips],
         jobs=[ProcessingJobResponse.model_validate(j) for j in jobs],
     )
-
-
-@router.post("/{video_id}/process", response_model=ProcessingJobResponse)
-def start_processing(
-    video_id: str,
-    db: Annotated[Session, Depends(get_db)],
-    user: Annotated[User | None, Depends(get_current_user_optional)] = None,
-):
-    try:
-        job = media_video_service.start_processing(db, video_id, user.id if user else None)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return ProcessingJobResponse.model_validate(job)
-
-
-@router.post("/{video_id}/search", response_model=list[SearchResultResponse])
-def search_video(
-    video_id: str,
-    payload: SearchRequest,
-    db: Annotated[Session, Depends(get_db)],
-):
-    video = db.get(MediaVideo, video_id)
-    if not video or video.deleted_at:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
-    results = search_service.semantic_search(db, video_id, payload.query, payload.top_k)
-    return [SearchResultResponse(**r) for r in results]
-
-
-@router.get("/{video_id}/transcript", response_model=TranscriptResponse)
-def get_transcript(video_id: str, db: Annotated[Session, Depends(get_db)]):
-    transcript = search_service.get_transcript(db, video_id)
-    if not transcript:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not found")
-    segments = search_service.get_segments(db, transcript.id)
-    return TranscriptResponse(
-        id=transcript.id,
-        video_id=video_id,
-        full_text=transcript.full_text,
-        language=transcript.language,
-        confidence=transcript.confidence,
-        status=transcript.status,
-        segments=[TranscriptSegmentResponse.model_validate(s) for s in segments],
-    )
-
-
-@router.get("/{video_id}/topics", response_model=list[TopicResponse])
-def get_topics(video_id: str, db: Annotated[Session, Depends(get_db)]):
-    return [TopicResponse.model_validate(t) for t in search_service.get_topics(db, video_id)]
 
 
 @router.post("/{video_id}/clips", response_model=ClipResponse, status_code=status.HTTP_201_CREATED)
@@ -330,20 +269,226 @@ def list_clips(video_id: str, db: Annotated[Session, Depends(get_db)]):
 
 @router.get("/files/{filename}")
 def serve_media_file(filename: str):
+    import mimetypes
     try:
         path = video_storage.get_local_path(filename)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found") from exc
-    return FileResponse(path, media_type="video/mp4")
+    mime, _ = mimetypes.guess_type(path.name)
+    return FileResponse(path, media_type=mime or "application/octet-stream")
 
 
 @router.get("/clips/files/{filename}")
 def serve_clip_file(filename: str):
+    import mimetypes
     try:
         path = clip_storage.get_local_path(filename)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found") from exc
-    return FileResponse(path, media_type="video/mp4", filename=filename)
+    mime, _ = mimetypes.guess_type(path.name)
+    return FileResponse(path, media_type=mime or "application/octet-stream", filename=filename)
+
+
+@router.post("/watermark/logo", status_code=status.HTTP_201_CREATED)
+async def upload_logo(
+    file: UploadFile = File(...),
+    user: Annotated[User | None, Depends(get_current_user_optional)] = None,
+):
+    temp_dir = Path(settings.local_storage_path) / settings.temp_storage_path
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    logo_path = temp_dir / f"logo_{uuid4()}{Path(file.filename or 'logo.png').suffix}"
+    
+    with logo_path.open("wb") as out:
+        while chunk := await file.read(1024 * 1024):
+            out.write(chunk)
+            
+    return {"logo_path": str(logo_path)}
+
+
+@router.post("/{video_id}/watermark", response_model=ClipResponse, status_code=status.HTTP_201_CREATED)
+def watermark_media(
+    video_id: str,
+    payload: WatermarkRequest,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User | None, Depends(get_current_user_optional)] = None,
+):
+    video = db.get(MediaVideo, video_id)
+    if not video or video.deleted_at:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+        
+    try:
+        clip = clip_service.create_clip_record(
+            db,
+            video_id=video_id,
+            title=payload.title,
+            start_time=0.0,
+            end_time=video.duration_seconds or 0.0,
+            user_id=user.id if user else None,
+            source="watermark",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    watermarks_data = [w.model_dump() for w in payload.watermarks]
+    
+    job = processing_job_service.create(
+        db, "watermarking", video_id=video_id, clip_id=clip.id, user_id=user.id if user else None,
+        metadata={"watermarks": watermarks_data}
+    )
+    
+    task = apply_watermark.delay(clip.id, job.id)
+    job.celery_task_id = task.id
+    db.commit()
+    return _clip_response(clip)
+
+
+@router.post("/clips/{clip_id}/watermark", response_model=ClipResponse, status_code=status.HTTP_201_CREATED)
+def watermark_clip(
+    clip_id: str,
+    payload: WatermarkRequest,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User | None, Depends(get_current_user_optional)] = None,
+):
+    parent_clip = db.get(Clip, clip_id)
+    if not parent_clip or parent_clip.deleted_at or parent_clip.status != "completed":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clip not found or not ready")
+        
+    try:
+        # Duration of output is same as parent clip
+        duration = parent_clip.duration_seconds
+        clip = clip_service.create_clip_record(
+            db,
+            video_id=parent_clip.video_id,
+            title=payload.title,
+            start_time=parent_clip.start_time,
+            end_time=parent_clip.end_time,
+            user_id=user.id if user else None,
+            source="watermark",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    watermarks_data = [w.model_dump() for w in payload.watermarks]
+    
+    job = processing_job_service.create(
+        db, "watermarking", video_id=parent_clip.video_id, clip_id=clip.id, user_id=user.id if user else None,
+        metadata={"watermarks": watermarks_data, "parent_clip_id": parent_clip.id}
+    )
+    
+    task = apply_watermark.delay(clip.id, job.id)
+    job.celery_task_id = task.id
+    db.commit()
+    return _clip_response(clip)
+
+
+@router.post("/watermark/batch", response_model=list[ClipResponse], status_code=status.HTTP_201_CREATED)
+def watermark_media_batch(
+    payload: BatchWatermarkRequest,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User | None, Depends(get_current_user_optional)] = None,
+):
+    clips = []
+    watermarks_data = [w.model_dump() for w in payload.watermarks]
+    
+    for video_id in payload.video_ids:
+        video = db.get(MediaVideo, video_id)
+        if not video or video.deleted_at:
+            continue
+            
+        try:
+            clip = clip_service.create_clip_record(
+                db,
+                video_id=video_id,
+                title=f"Watermarked: {video.title}",
+                start_time=0.0,
+                end_time=video.duration_seconds or 0.0,
+                user_id=user.id if user else None,
+                source="watermark",
+            )
+            clips.append(clip)
+            
+            job = processing_job_service.create(
+                db, "watermarking", video_id=video_id, clip_id=clip.id, user_id=user.id if user else None,
+                metadata={"watermarks": watermarks_data}
+            )
+            
+            task = apply_watermark.delay(clip.id, job.id)
+            job.celery_task_id = task.id
+            db.commit()
+        except Exception:
+            pass
+            
+    return [_clip_response(c) for c in clips]
+
+
+@router.post("/{video_id}/convert", response_model=ClipResponse, status_code=status.HTTP_201_CREATED)
+def convert_media(
+    video_id: str,
+    payload: ConvertRequest,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User | None, Depends(get_current_user_optional)] = None,
+):
+    video = db.get(MediaVideo, video_id)
+    if not video or video.deleted_at:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+        
+    try:
+        clip = clip_service.create_clip_record(
+            db,
+            video_id=video_id,
+            title=payload.title,
+            start_time=0.0,
+            end_time=video.duration_seconds or 0.0,
+            user_id=user.id if user else None,
+            source="conversion",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    job = processing_job_service.create(
+        db, "conversion", video_id=video_id, clip_id=clip.id, user_id=user.id if user else None,
+        metadata=payload.model_dump()
+    )
+    
+    task = convert_format.delay(clip.id, job.id)
+    job.celery_task_id = task.id
+    db.commit()
+    return _clip_response(clip)
+
+
+@router.post("/{video_id}/extract-audio", response_model=ClipResponse, status_code=status.HTTP_201_CREATED)
+def extract_media_audio(
+    video_id: str,
+    payload: ExtractAudioRequest,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[User | None, Depends(get_current_user_optional)] = None,
+):
+    video = db.get(MediaVideo, video_id)
+    if not video or video.deleted_at:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+        
+    try:
+        clip = clip_service.create_clip_record(
+            db,
+            video_id=video_id,
+            title=payload.title,
+            start_time=0.0,
+            end_time=video.duration_seconds or 0.0,
+            user_id=user.id if user else None,
+            source="audio_extraction",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    job = processing_job_service.create(
+        db, "audio_extraction", video_id=video_id, clip_id=clip.id, user_id=user.id if user else None,
+        metadata=payload.model_dump()
+    )
+    
+    task = extract_audio.delay(clip.id, job.id)
+    job.celery_task_id = task.id
+    db.commit()
+    return _clip_response(clip)
 
 
 @router.delete("/{video_id}", status_code=status.HTTP_204_NO_CONTENT)

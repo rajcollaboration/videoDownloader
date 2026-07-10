@@ -64,58 +64,6 @@ class ProcessingJobResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class TranscriptSegmentResponse(BaseModel):
-    id: str
-    text: str
-    start_time: float
-    end_time: float
-    confidence: float | None = None
-    speaker: str | None = None
-
-    model_config = {"from_attributes": True}
-
-
-class TranscriptResponse(BaseModel):
-    id: str
-    video_id: str
-    full_text: str | None = None
-    language: str | None = None
-    confidence: float | None = None
-    status: str
-    segments: list[TranscriptSegmentResponse] = []
-
-    model_config = {"from_attributes": True}
-
-
-class TopicResponse(BaseModel):
-    id: str
-    title: str
-    summary: str | None = None
-    start_time: float
-    end_time: float
-    confidence: float | None = None
-    key_decisions: list[Any] | None = None
-    action_items: list[Any] | None = None
-    risks: list[Any] | None = None
-    issues_raised: list[Any] | None = None
-
-    model_config = {"from_attributes": True}
-
-
-class SearchRequest(BaseModel):
-    query: str = Field(min_length=2, max_length=1000)
-    top_k: int = Field(default=5, ge=1, le=20)
-
-
-class SearchResultResponse(BaseModel):
-    start_time: float
-    end_time: float
-    confidence: float
-    summary: str
-    text: str | None = None
-    chunk_id: str | None = None
-
-
 class ClipCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     start_time: float = Field(ge=0)
@@ -156,7 +104,56 @@ class VideoFromDownloadRequest(BaseModel):
 
 
 class VideoDetailResponse(MediaVideoResponse):
-    transcript: TranscriptResponse | None = None
-    topics: list[TopicResponse] = []
     clips: list[ClipResponse] = []
     jobs: list[ProcessingJobResponse] = []
+
+
+class WatermarkConfigSchema(BaseModel):
+    type: str  # "text" | "logo"
+    text: str | None = None
+    logo_path: str | None = None
+    position: str = "center"
+    x: int | None = None
+    y: int | None = None
+    opacity: float = 1.0
+    scale: float | None = None
+    rotation: float = 0.0
+    margin: int = 10
+    padding: int = 0
+    font_name: str | None = "Arial"
+    font_size: int = 24
+    font_color: str = "#FFFFFF"
+    outline_color: str | None = None
+    outline_width: int = 0
+    shadow_color: str | None = None
+    shadow_offset_x: int = 2
+    shadow_offset_y: int = 2
+    start_time: float | None = None
+    end_time: float | None = None
+
+
+class WatermarkRequest(BaseModel):
+    title: str
+    watermarks: list[WatermarkConfigSchema]
+
+
+class BatchWatermarkRequest(BaseModel):
+    video_ids: list[str]
+    watermarks: list[WatermarkConfigSchema]
+
+
+class ConvertRequest(BaseModel):
+    title: str
+    format: str
+    quality_preset: str = "medium"
+    resolution: str | None = None
+    fps: int | None = None
+    bitrate: str | None = None
+    codec: str | None = None
+
+
+class ExtractAudioRequest(BaseModel):
+    title: str
+    format: str
+    bitrate: str | None = None
+    preserve_metadata: bool = True

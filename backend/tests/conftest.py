@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-os.environ.setdefault("DATABASE_URL", f"sqlite:///{Path('test.db').resolve()}")
+os.environ["DATABASE_URL"] = f"sqlite:///{Path('test.db').resolve()}"
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:3000")
 os.environ.setdefault("SECRET_KEY", "test-secret")

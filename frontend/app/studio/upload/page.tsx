@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { uploadVideo, createVideoFromUrl } from "@/services/media-api";
 
-const ACCEPTED = ".mp4,.mov,.webm,.mkv,.avi,.mp3,.wav,.aac,.ogg,.flac,.m4a";
+const ACCEPTED = ".mp4,.mov,.webm,.mkv,.avi,.mp3,.wav,.aac,.ogg,.flac,.m4a,.png,.jpg,.jpeg,.webp,.gif";
 
 export default function UploadPage() {
   const router = useRouter();
@@ -17,6 +17,16 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0] ?? null;
+    setFile(selectedFile);
+    if (selectedFile && !title.trim()) {
+      // Strip extension from filename to use as default title
+      const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, "");
+      setTitle(nameWithoutExt);
+    }
+  };
 
   const handleUpload = async () => {
     if (!file || !title.trim()) return;
@@ -48,9 +58,9 @@ export default function UploadPage() {
 
   return (
     <div className="container-shell py-10 max-w-2xl">
-      <h1 className="text-2xl font-bold mb-2">Upload Video / Audio</h1>
+      <h1 className="text-2xl font-bold mb-2">Upload Video / Audio / Image</h1>
       <p className="text-muted-foreground mb-8">
-        Upload a video or audio file, or import from a downloadable URL for AI search and clipping.
+        Upload a video, audio, or image file, or import from a downloadable URL for AI search, clipping, and watermarking.
       </p>
 
       <div className="flex gap-2 mb-6">
@@ -65,33 +75,37 @@ export default function UploadPage() {
       <div className="space-y-4 rounded-xl border border-border bg-card p-6">
         <div>
           <label className="text-sm font-medium">Title</label>
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Meeting recording" className="mt-1" />
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Enter a descriptive title" className="mt-1" />
         </div>
 
         {tab === "upload" ? (
           <>
             <div>
-              <label className="text-sm font-medium">Video / Audio File</label>
+              <label className="text-sm font-medium">Media File (Video, Audio, Image)</label>
               <input
                 type="file"
                 accept={ACCEPTED}
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                className="mt-1 block w-full text-sm"
+                onChange={handleFileChange}
+                className="mt-1 block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
               />
-              <p className="text-xs text-muted-foreground mt-1">Video: MP4, MOV, WebM, MKV, AVI &nbsp;|&nbsp; Audio: MP3, WAV, AAC, OGG, FLAC, M4A &nbsp;(max 2GB)</p>
+              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                <strong>Video:</strong> MP4, MOV, WebM, MKV, AVI &nbsp;|&nbsp; 
+                <strong>Audio:</strong> MP3, WAV, AAC, OGG, FLAC, M4A &nbsp;|&nbsp; 
+                <strong>Image:</strong> PNG, JPG, JPEG, WebP, GIF &nbsp;(max 2GB)
+              </p>
             </div>
-            <Button onClick={() => void handleUpload()} disabled={loading || !file || !title.trim()} className="w-full">
-              {loading ? "Uploading…" : "Upload & Continue"}
+            <Button onClick={() => void handleUpload()} disabled={loading || !file || !title.trim()} className="w-full font-bold shadow-glow mt-4">
+              {loading ? "Uploading and Probing…" : "Upload & Continue"}
             </Button>
           </>
         ) : (
           <>
             <div>
-              <label className="text-sm font-medium">Video URL</label>
-              <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." className="mt-1" />
+              <label className="text-sm font-medium">Media URL</label>
+              <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/file.mp4" className="mt-1" />
             </div>
-            <Button onClick={() => void handleUrlImport()} disabled={loading || !url.trim()} className="w-full">
-              {loading ? "Importing…" : "Import from URL"}
+            <Button onClick={() => void handleUrlImport()} disabled={loading || !url.trim()} className="w-full font-bold shadow-glow">
+              {loading ? "Importing & Resolving…" : "Import from URL"}
             </Button>
           </>
         )}

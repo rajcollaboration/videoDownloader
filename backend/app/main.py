@@ -29,6 +29,18 @@ with SessionLocal() as db:
 
 Base.metadata.create_all(bind=engine)
 
+# Programmatic schema migrations to ensure all columns exist
+from sqlalchemy import text
+try:
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE download_jobs ALTER COLUMN request_id DROP NOT NULL;"))
+        conn.execute(text("ALTER TABLE download_jobs ADD COLUMN IF NOT EXISTS url VARCHAR(2048);"))
+        conn.execute(text("ALTER TABLE download_jobs ADD COLUMN IF NOT EXISTS batch_id VARCHAR(36);"))
+        conn.execute(text("ALTER TABLE download_jobs ADD COLUMN IF NOT EXISTS celery_task_id VARCHAR(100);"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_download_jobs_batch_id ON download_jobs (batch_id);"))
+except Exception as exc:
+    logging.getLogger(__name__).exception("Schema migration failed on startup: %s", exc)
+
 _BLOG_IMAGES_DIR = Path(settings.local_storage_path) / "blog-images"
 _BLOG_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 

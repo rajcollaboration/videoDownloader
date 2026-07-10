@@ -78,17 +78,12 @@ def process_single_video(self, job_id: str) -> None:
         if not job:
             return
 
-        request = db.get(VideoRequest, job.request_id)
-        if not request:
-            job.status = "failed"
-            job.message = "Original request no longer exists."
-            db.commit()
-            return
-
         job.status = "processing"
         job.progress = 5
         job.message = "Fetching video metadata"
+        job.celery_task_id = self.request.id
         db.commit()
+        
         progress_store.publish_job(
             job_id=job.id,
             stage="fetching",
@@ -96,7 +91,15 @@ def process_single_video(self, job_id: str) -> None:
             message="Fetching video metadata",
         )
 
-        _process_single(job=job, source_url=request.url, db=db)
+        request = db.get(VideoRequest, job.request_id) if job.request_id else None
+        if not request and not job.url:
+            job.status = "failed"
+            job.message = "Original request no longer exists."
+            db.commit()
+            return
+
+        source_url = request.url if request else job.url
+        _process_single(job=job, source_url=source_url, db=db)
 
         progress_store.publish_job(
             job_id=job.id,
@@ -480,6 +483,14 @@ def _process_single(job: DownloadJob, source_url: str, db: Session) -> None:
         message="Downloading media",
     )
 
+    title = "Direct Download"
+    try:
+        with YoutubeDL({"quiet": True, **cookie_options()}) as ydl:
+            info = ydl.extract_info(source_url, download=False)
+            title = info.get("title", "Direct Download")
+    except Exception:
+        pass
+
     try:
         with YoutubeDL(
             _base_ydl_opts(job.format_id, template_path, job.audio_only, hook)
@@ -502,6 +513,7 @@ def _process_single(job: DownloadJob, source_url: str, db: Session) -> None:
                 job.message = "Download completed"
                 job.output_path = final_path
                 db.commit()
+                _register_media_video(db, job, resolved_output, title)
                 return
         raise
 
@@ -512,3 +524,39 @@ def _process_single(job: DownloadJob, source_url: str, db: Session) -> None:
     job.message = "Download completed"
     job.output_path = final_path
     db.commit()
+    _register_media_video(db, job, resolved_output, title)
+
+
+def _register_media_video(db: Session, job: DownloadJob, local_path_str: str, title: str) -> None:
+    from app.models.media_video import MediaVideo
+    from app.services.video_validation import video_validation
+    from app.services.media_storage import video_storage
+    from uuid import uuid4
+    import logging
+    
+    try:
+        local_path = Path(local_path_str)
+        probe = video_validation.probe_video(local_path)
+        storage_key = f"{uuid4()}.mp4"
+        
+        video_storage.save(storage_key, str(local_path), "video/mp4")
+        
+        video = MediaVideo(
+            title=title,
+            source_type="download",
+            download_job_id=job.id,
+            file_path=str(local_path),
+            storage_key=storage_key,
+            mime_type="video/mp4",
+            file_size=local_path.stat().st_size if local_path.is_file() else None,
+            duration_seconds=probe.get("duration_seconds"),
+            width=probe.get("width"),
+            height=probe.get("height"),
+            fps=probe.get("fps"),
+            status="ready",
+        )
+        db.add(video)
+        db.commit()
+    except Exception as exc:
+        logger = logging.getLogger(__name__)
+        logger.exception("Failed to auto register MediaVideo for job %s: %s", job.id, exc)

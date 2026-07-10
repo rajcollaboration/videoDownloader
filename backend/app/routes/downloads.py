@@ -10,11 +10,14 @@ from app.schemas.download import (
     DownloadResponse,
     DownloadStatusResponse,
     PlaylistItemResponse,
+    CreateBatchDownloadRequest,
 )
 from app.services import progress_store
 from app.services.download_service import DownloadService
 from app.services.storage import StorageService
-from app.workers.tasks import cleanup_storage_file
+from app.workers.tasks import cleanup_storage_file, process_single_video
+from app.workers.celery_app import celery_app
+from uuid import uuid4
 
 router = APIRouter()
 service = DownloadService()
@@ -169,3 +172,114 @@ def download_completed_file(filename: str) -> FileResponse:
         filename=friendly_name,
         headers={"Content-Disposition": f'attachment; filename="{friendly_name}"'},
     )
+
+
+@router.post("/batch", response_model=dict, status_code=status.HTTP_202_ACCEPTED)
+def create_batch_download(
+    payload: CreateBatchDownloadRequest,
+    db: Session = Depends(get_db)
+):
+    batch_id = str(uuid4())
+    jobs = []
+    
+    for url in payload.urls:
+        url_cleaned = url.strip()
+        if not url_cleaned:
+            continue
+            
+        job = DownloadJob(
+            url=url_cleaned,
+            batch_id=batch_id,
+            format_id="bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" if not payload.audio_only else "bestaudio",
+            audio_only=payload.audio_only,
+            status="pending",
+            progress=0,
+            message="Queued for batch download",
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        
+        # Start download task
+        task = process_single_video.delay(job.id)
+        job.celery_task_id = task.id
+        db.commit()
+        
+        jobs.append({
+            "jobId": job.id,
+            "status": job.status,
+            "progress": job.progress,
+            "message": job.message,
+        })
+        
+    return {"batchId": batch_id, "jobs": jobs}
+
+
+@router.post("/{job_id}/pause", status_code=status.HTTP_200_OK)
+def pause_download(job_id: str, db: Session = Depends(get_db)):
+    job = db.get(DownloadJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    if job.status == "processing" and job.celery_task_id:
+        # Revoke the celery task
+        celery_app.control.revoke(job.celery_task_id, terminate=True)
+        
+    job.status = "paused"
+    job.message = "Paused by user"
+    db.commit()
+    
+    progress_store.publish_job(
+        job_id=job.id,
+        stage="paused",
+        progress=job.progress,
+        message=job.message,
+    )
+    return {"status": "paused"}
+
+
+@router.post("/{job_id}/resume", status_code=status.HTTP_200_OK)
+def resume_download(job_id: str, db: Session = Depends(get_db)):
+    job = db.get(DownloadJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    if job.status in ("paused", "failed", "pending"):
+        job.status = "pending"
+        job.message = "Resuming download"
+        db.commit()
+        
+        task = process_single_video.delay(job.id)
+        job.celery_task_id = task.id
+        db.commit()
+        
+        progress_store.publish_job(
+            job_id=job.id,
+            stage="queued",
+            progress=job.progress,
+            message=job.message,
+        )
+        
+    return {"status": "resumed"}
+
+
+@router.post("/{job_id}/cancel", status_code=status.HTTP_200_OK)
+def cancel_download(job_id: str, db: Session = Depends(get_db)):
+    job = db.get(DownloadJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    if job.status in ("processing", "pending") and job.celery_task_id:
+        celery_app.control.revoke(job.celery_task_id, terminate=True)
+        
+    job.status = "failed"
+    job.message = "Cancelled by user"
+    db.commit()
+    
+    progress_store.publish_job(
+        job_id=job.id,
+        stage="failed",
+        progress=job.progress,
+        message=job.message,
+    )
+    return {"status": "cancelled"}

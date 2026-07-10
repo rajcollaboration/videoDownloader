@@ -27,6 +27,12 @@ ALLOWED_MIME_TYPES = {
     "audio/x-flac",
     "audio/mp4",
     "audio/x-m4a",
+    # Image formats
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+    "image/gif",
 }
 
 
@@ -43,7 +49,7 @@ class VideoValidationService:
     def validate_mime(self, content_type: str | None, filename: str) -> str:
         guessed, _ = mimetypes.guess_type(filename)
         mime = content_type or guessed or ""
-        if mime and mime not in ALLOWED_MIME_TYPES and not mime.startswith("video/") and not mime.startswith("audio/"):
+        if mime and mime not in ALLOWED_MIME_TYPES and not mime.startswith("video/") and not mime.startswith("audio/") and not mime.startswith("image/"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid MIME type: {mime}",
@@ -71,6 +77,20 @@ class VideoValidationService:
         return size, mime
 
     def probe_video(self, path: Path) -> dict:
+        ext = path.suffix.lower()
+        if ext in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+            try:
+                from PIL import Image
+                with Image.open(path) as img:
+                    return {
+                        "duration_seconds": 0.0,
+                        "width": img.width,
+                        "height": img.height,
+                        "fps": 0.0,
+                    }
+            except Exception as exc:
+                logger.warning("PIL probe failed on %s: %s", path, exc)
+                
         cmd = [
             "ffprobe",
             "-v",
