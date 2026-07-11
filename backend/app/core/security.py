@@ -9,7 +9,18 @@ _requests: dict[str, deque[float]] = defaultdict(deque)
 
 
 def enforce_rate_limit(request: Request) -> None:
-    identifier = request.client.host if request.client else "anonymous"
+    # Resolve the client IP, prioritizing standard proxy headers since the app
+    # typically runs behind a reverse proxy (e.g. Nginx).
+    forwarded_for = request.headers.get("x-forwarded-for")
+    real_ip = request.headers.get("x-real-ip")
+    if forwarded_for:
+        # X-Forwarded-For can contain multiple IPs, the first one is the client
+        identifier = forwarded_for.split(",")[0].strip()
+    elif real_ip:
+        identifier = real_ip.strip()
+    else:
+        identifier = request.client.host if request.client else "anonymous"
+
     now = time()
     window = _requests[identifier]
 
@@ -23,3 +34,4 @@ def enforce_rate_limit(request: Request) -> None:
         )
 
     window.append(now)
+
