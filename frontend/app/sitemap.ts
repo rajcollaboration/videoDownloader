@@ -4,7 +4,8 @@ import { platformPages, siteConfig } from "@/lib/site";
 
 const blogSlugs = [
   "how-to-download-instagram-videos",
-  "best-video-downloader-tools"
+  "best-video-downloader-tools",
+  "how-to-download-social-media-videos-free-guide"
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {

@@ -36,6 +36,48 @@ export const platformPages = [
     description:
       "Download Instagram Reels and videos from supported public links with preview, quality selection, and audio extraction options.",
     platform: "Instagram"
+  },
+  {
+    slug: "download-tiktok-video",
+    title: "TikTok Video Downloader",
+    description:
+      "Download TikTok videos online for free. Save TikToks in high quality without watermarks on any device.",
+    platform: "TikTok"
+  },
+  {
+    slug: "download-linkedin-video",
+    title: "LinkedIn Video Downloader",
+    description:
+      "Save LinkedIn videos and posts online. Extract high-quality MP4 professional video clips and tutorials.",
+    platform: "LinkedIn"
+  },
+  {
+    slug: "download-reddit-video",
+    title: "Reddit Video Downloader",
+    description:
+      "Download Reddit videos with audio automatically merged. Fast, free, and works directly in your web browser.",
+    platform: "Reddit"
+  },
+  {
+    slug: "download-twitter-video",
+    title: "Twitter (X) Video Downloader",
+    description:
+      "Save videos and GIFs from Twitter (X) posts. Fast processing, MP4 output, and no account creation required.",
+    platform: "X"
+  },
+  {
+    slug: "download-pinterest-video",
+    title: "Pinterest Video Downloader",
+    description:
+      "Download Pinterest videos and story Pins. Save creative ideas and inspiration directly to your local storage.",
+    platform: "Pinterest"
+  },
+  {
+    slug: "download-vimeo-video",
+    title: "Vimeo Video Downloader",
+    description:
+      "Extract and download public Vimeo videos in original high-definition formats with a single click.",
+    platform: "Vimeo"
   }
 ] as const;
 
